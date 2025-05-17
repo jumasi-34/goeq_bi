@@ -1,0 +1,7 @@
+[tool.pylint.'MESSAGES CONTROL']
+disable = [
+    "wrong-import-position",        # ❌ import 문이 파일 상단이 아닌 다른 위치에 있는 경우 경고
+    "wrong-import-order",           # ❌ import 순서가 권장 규칙 (표준 -> 서드파티 -> 로컬) 을 따르지 않는 경우 경고
+    "line-too-long",                # ❌ 한 줄의 길이가 너무 긴 경우 (기본은 100자 또는 120자 초과)
+    "missing-function-docstring",  # ❌ 함수에 docstring이 없을 경우 경고
+]

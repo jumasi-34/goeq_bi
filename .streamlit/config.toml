@@ -1,0 +1,10 @@
+[theme]
+base = "light"
+primaryColor = "#F63366"
+backgroundColor = "black"
+secondaryBackgroundColor = "#1E1E1E"
+textColor = "white"
+font = "sans serif"
+
+[server]
+fileWatcherType = "watchdog"

@@ -1,0 +1,53 @@
+{
+  // Python 경로 및 포매터 설정
+  "python.pythonPath": "C:\\Users\\HANTA\\miniconda3\\envs\\goeq\\python.exe",
+  "python.formatting.provider": "black",
+  // Python 파일에 대한 설정
+  "[python]": {
+    "editor.defaultFormatter": "ms-python.black-formatter"
+  },
+  // 에디터 설정
+  "editor.wordWrap": "on",
+  "editor.fontFamily": "D2Coding",
+  "editor.formatOnSave": true,
+  "editor.foldingImportsByDefault": false, // import 자동 접힘 방지
+  "editor.folding": true,
+  "editor.foldingStrategy": "auto",
+  // 파일 확장자 인식 설정
+  "files.associations": {
+    "*.md": "markdown",
+    "*.py": "python"
+  },
+  // 마크다운 확장 기능 설정
+  "markdown.extension.links.filePath": "relative",
+  "markdown.extension.toc.githubCompatibility": true,
+  "markdown.preview.doubleClickToSwitchToEditor": false,
+  "markdown.preview.breaks": true,
+  "markdown.preview.scrollEditorWithPreview": true,
+  "markdown.preview.scrollPreviewWithEditor": true,
+  // Foam 관련 설정
+  "foam.graph.randomizeNodes": false,
+  "foam.openDailyNote.directory": "journal",
+  "files.exclude": {
+    "**/__pycache__": true,
+    "**/__init__.py": true
+  },
+  "search.exclude": {
+    "**/__pycache__": true,
+    "**/__init__.py": true
+  },
+  // black의 줄 길이 제한 확장 (pipe 줄바꿈 줄이기 위함)
+  "python.formatting.blackArgs": [
+    "--line-length",
+    "120"
+  ],
+  // 줄 길이 안내선 표시
+  "editor.rulers": [
+    120
+  ],
+  // 정렬된 import (black 스타일로)
+  "python.sortImports.args": [
+    "--profile",
+    "black"
+  ],
+}

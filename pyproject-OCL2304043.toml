@@ -1,0 +1,12 @@
+[tool.pylint.'MESSAGES CONTROL']
+disable = [
+    "wrong-import-position",
+    "wrong-import-order",
+    "line-too-long",                # line-too-long 경고는 무시
+    "missing-function-docstring",
+    "invalid-name",
+]
+
+[tool.pylint.FORMAT]
+const-rgx = '(([A-Z_][A-Z0-9_]*)|(__.*__))$'
+max-line-length = 120   # ✅ 120자로 기준 통일

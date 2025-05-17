@@ -1,0 +1,56 @@
+﻿PLANT,METHOD,Classification,POSITION,OE_RR_TEST_METHOD,Slope,Intercept
+CP,ISO,HK Global Align,SRR #01 - A Pos,-,0.9865,0.1818
+CP,ISO,HK Global Align,SRR #01 - B Pos,-,0.9462,0.4907
+DP,ISO,HK Global Align,PC SRR #01 - A Pos,-,0.9493,0.6077
+DP,ISO,HK Global Align,PC SRR #01 - B Pos,-,0.9703,0.4811
+HP,ISO,HK Global Align,PC SRR#01 - A Pos,-,1.0031,0.1166
+HP,ISO,HK Global Align,PC SRR#01 - B Pos,-,1.005,0.4588
+IP,ISO,HK Global Align,SRR #01 - A Pos,-,1.0036,0.1167
+IP,ISO,HK Global Align,SRR #01 - B Pos,-,1.0292,-0.0577
+JP,ISO,HK Global Align,SRR #01 - A Pos,-,1.0618,-0.3612
+JP,ISO,HK Global Align,SRR #01 - B Pos,-,1.0485,-0.6448
+KP,ISO,HK Global Align,PC SRR #01 - A Pos,-,1.05083746,-0.1979367
+KP,ISO,HK Global Align,PC SRR #01 - B Pos,-,1.01093224,0.11551728
+KP,ISO,HK Global Align,PC SRR #02 - A Pos,-,1.01702464,0.1721766
+KP,ISO,HK Global Align,PC SRR #02 - B Pos,-,0.99438122,0.32590816
+MP,ISO,HK Global Align,SRR #01 - A Pos,-,1.0202,-0.001
+MP,ISO,HK Global Align,SRR #01 - B Pos,-,0.9751,0.338
+MP,ISO,HK Global Align,SRR #02 - A Pos,-,1.0458,-0.338
+MP,ISO,HK Global Align,SRR #02 - B Pos,-,1.0297,-0.2712
+TP,ISO,HK Global Align,Tp RR #01 - A Pos,-,0.9787,0.2041
+TP,ISO,HK Global Align,Tp RR #01 - B Pos,-,0.9645,0.3731
+-,ISO,Ref. Lab Align,-,ISO 28580 (AUDI),1.060114685,-0.628035517
+-,ISO,Ref. Lab Align,-,ISO 28580 (EU),1,0.0296
+-,ISO,Ref. Lab Align,-,ISO 28580 (HKMC),0.999294,0.038446
+-,ISO,Ref. Lab Align,-,ISO 28580 (R&D#2),1.033057851,-0.536363636
+-,ISO,Ref. Lab Align,-,ISO 28580 (R&D#3),0.9998,-0.2627
+-,ISO,Ref. Lab Align,-,ISO 28580 (TOYOTA_2013),0.9259,0.555 
+-,ISO,Ref. Lab Align,-,ISTO 28580 (TOYOTA_2018),0.964536554,0.54334924
+DP,SVP,HK Global & Ref. Lab Align,PC SRR #01 - A Pos,SVP (HKMC),1.02341156,-0.24439939
+DP,SVP,HK Global & Ref. Lab Align,PC SRR #01 - B Pos,SVP (HKMC),1.02719902,-0.27808785
+DP,SVP,HK Global & Ref. Lab Align,PC SRR #01 - A Pos,SVP (HONDA),0.9463014,0.67183155
+DP,SVP,HK Global & Ref. Lab Align,PC SRR #01 - B Pos,SVP (HONDA),0.95289755,0.62772595
+DP,SVP,HK Global & Ref. Lab Align,PC SRR #01 - A Pos,SVP (NISSAN),1.0312,-0.1058
+DP,SVP,HK Global & Ref. Lab Align,PC SRR #01 - B Pos,SVP (NISSAN),1.0315,-0.0423
+KP,SVP,HK Global & Ref. Lab Align,PC SRR #02 - A Pos,SVP (HKMC),1.07274821,-0.5895566
+KP,SVP,HK Global & Ref. Lab Align,PC SRR #02 - B Pos,SVP (HKMC),1.04593698,-0.37596379
+KP,SVP,HK Global & Ref. Lab Align,PC SRR #02 - A Pos,SVP (HONDA),1.0305746,0.1467977
+KP,SVP,HK Global & Ref. Lab Align,PC SRR #02 - B Pos,SVP (HONDA),0.99818455,0.3566931
+JP,SVP,HK Global & Ref. Lab Align,SRR #01 - A Pos,SVP (HKMC),0.9747726,-0.11532674
+JP,SVP,HK Global & Ref. Lab Align,SRR #01 - B Pos,SVP (HKMC),0.96002144,0.09926277
+HP,SVP,HK Global & Ref. Lab Align,PC SRR#01 - A Pos,SVP (HKMC),0.9747726,-0.11532674
+HP,SVP,HK Global & Ref. Lab Align,PC SRR#01 - B Pos,SVP (HKMC),0.96002144,0.09926277
+IP,SVP,HK Global & Ref. Lab Align,SRR #01 - A Pos,SVP (NISSAN),0.9855,-0.1541
+IP,SVP,HK Global & Ref. Lab Align,SRR #01 - B Pos,SVP (NISSAN),0.9723,0.1219
+IP,SVP,HK Global & Ref. Lab Align,SRR #01 - A Pos,SVP (HONDA),0.96595122,-0.22747534
+IP,SVP,HK Global & Ref. Lab Align,SRR #01 - B Pos,SVP (HONDA),0.9280572,0.16660268
+TP,SVP,HK Global & Ref. Lab Align,Tp RR #01 - A Pos,SVP (NISSAN),1.0771,-0.8082
+TP,SVP,HK Global & Ref. Lab Align,Tp RR #01 - B Pos,SVP (NISSAN),1.0905,-0.8044
+TP,SVP,HK Global & Ref. Lab Align,Tp RR #01 - A Pos,SVP (HONDA),1.0715298,-0.79487655
+TP,SVP,HK Global & Ref. Lab Align,Tp RR #01 - B Pos,SVP (HONDA),1.08167015,-0.8000944
+IP,SVP,HK Global & Ref. Lab Align,SRR #01 - A Pos,SVP (HKMC),0.9529,0.4454
+IP,SVP,HK Global & Ref. Lab Align,SRR #01 - B Pos,SVP (HKMC),0.9088,0.8996
+CP,SVP,HK Global & Ref. Lab Align,PC SRR#01 - A Pos,SVP (HKMC),1.0106,-0.3257
+CP,SVP,HK Global & Ref. Lab Align,PC SRR#01 - B Pos,SVP (HKMC),1.0297,-0.3863
+KP,SVP,HK Global & Ref. Lab Align,PC SRR #02 - A Pos,SVP (NISSAN),0.9868,0.207
+KP,SVP,HK Global & Ref. Lab Align,PC SRR #02 - B Pos,SVP (NISSAN),0.9996,0.168
