@@ -14,10 +14,12 @@ DB Client별 쿼리를 실행하는 다양한 데이터베이스 클라이언트
 """
 
 import sys
+import os
+from dotenv import load_dotenv
 from functools import wraps
 import pandas as pd
 import streamlit as st
-import sqlite3
+import sqlite3  
 from sqlalchemy import create_engine
 
 sys.path.append(r"D:\OneDrive - HKNC\@ Project_CQMS\# Workstation_2")
@@ -50,15 +52,18 @@ class SnowflakeClient:
     """
 
     def __init__(self):
+        # .env 파일 로딩
+        load_dotenv()
+        
         self.config = {
-            "user": "21300584",
-            "password": "Jumasi21300584",
-            "account": "ls58031.ap-northeast-2.privatelink",
-            "warehouse": "SMALL_WH",
-            "database": "HKT_DW",
-            "schema": "KPPMES",
+            "user": os.getenv("SF_USER"),
+            "password": os.getenv("SF_PASSWORD"),
+            "account": os.getenv("SF_ACCOUNT"),
+            "warehouse": os.getenv("SF_WAREHOUSE"),
+            "database": os.getenv("SF_DATABASE"),
+            "schema": os.getenv("SF_SCHEMA"),
         }
-
+        
     def execute(self, query: str):
         """
         Snowflake에 연결하여 쿼리를 실행한 후 DataFrame으로 반환합니다.
