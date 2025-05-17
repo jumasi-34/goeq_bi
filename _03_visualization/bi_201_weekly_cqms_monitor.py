@@ -3,7 +3,7 @@ bi_201_weekly_cqms_monitor
 """
 
 import sys
-from datetime import timedelta, datetime
+from datetime import timedelta
 import numpy as np
 import plotly.graph_objects as go
 
@@ -11,7 +11,7 @@ import plotly.graph_objects as go
 sys.path.append(r"D:\OneDrive - HKNC\@ Project_CQMS\# Workstation_2")
 
 from _02_preprocessing.CQMS import df_quality_issue, df_4m_change, df_customer_audit
-from _03_visualization import config_plotly, helper_plotly
+from _03_visualization import config_plotly
 from _05_commons import config
 
 

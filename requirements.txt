@@ -7,3 +7,4 @@ plotly==6.0.0
 scipy==1.15.3
 SQLAlchemy==2.0.38
 streamlit==1.42.2
+snowflake-sqlalchemy
