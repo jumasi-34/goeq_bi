@@ -21,6 +21,10 @@ import pandas as pd
 import streamlit as st
 import sqlite3  
 from sqlalchemy import create_engine
+from pathlib import Path
+
+env_path = Path(__file__).resolve().parent.parent / ".env"
+load_dotenv(dotenv_path=env_path)
 
 sys.path.append(r"D:\OneDrive - HKNC\@ Project_CQMS\# Workstation_2")
 from _05_commons import config
@@ -52,8 +56,6 @@ class SnowflakeClient:
     """
 
     def __init__(self):
-        # .env 파일 로딩
-        load_dotenv()
         
         self.config = {
             "user": os.getenv("SF_USER"),
