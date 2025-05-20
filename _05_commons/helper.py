@@ -19,6 +19,7 @@ import sqlite3
 import importlib
 import sys
 from pathlib import Path
+import pandas as pd
 
 from _05_commons import config
 
@@ -75,7 +76,7 @@ class SQLiteDML:
     def fetch_query(self, query: str, params: tuple = ()) -> list[tuple]:
         """SELECT 쿼리 실행 및 결과 반환"""
         with sqlite3.connect(self.db_path) as conn:
-            return conn.execute(query, params).fetchall()
+            return pd.read_sql_query(query, conn, params=params)
 
     def insert_data(self, table: str, columns: list[str], values: tuple) -> None:
         """단일 행 데이터 삽입"""
