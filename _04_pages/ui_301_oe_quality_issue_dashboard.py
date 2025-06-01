@@ -46,6 +46,7 @@ df_global_monthly = pd_df.aggregate_oeqi_by_global_monthly(selected_year)
 df_global_yearly = pd_df.aggregate_oeqi_by_global_yearly(selected_year)
 df_goeq_monthly = pd_df.aggregate_oeqi_by_goeq_monthly(selected_year)
 df_goeq_yearly = pd_df.aggregate_oeqi_by_goeq_yearly(selected_year)
+df_goeq_yearly_pre = pd_df.aggregate_oeqi_by_goeq_yearly(selected_year - 1)
 df_oeapp = df_oeapp.load_oeapp_df()
 
 
@@ -128,7 +129,9 @@ This ensures ongoing issues are also reflected in the MTTC calculation.
         .reset_index()
     )
     cols[0].plotly_chart(
-        viz.draw_three_years_mttc(df_global_yearly), use_container_width=True
+        viz.draw_three_years_mttc(df_global_yearly),
+        use_container_width=True,
+        key="MTTC_BAR",
     )
     cols[1].plotly_chart(
         viz.draw_mttc_global_indicator(df_mttc), use_container_width=True
@@ -237,7 +240,7 @@ with tabs[1]:  # PLANT
     st.dataframe(df_raw_3_years, use_container_width=True)
 
 with tabs[2]:  # OEQG
-    cols = st.columns(2)
+    cols = st.columns(2, gap="large")
     cols[0].plotly_chart(viz.draw_goeq_view_issue_count_monthly_trend(df_goeq_monthly))
     cols[1].plotly_chart(viz.draw_goeq_view_oeqi_monthly_trend(df_goeq_monthly))
 
@@ -251,9 +254,19 @@ with tabs[2]:  # OEQG
         )
         return trace_local
 
-    def get_mttc_layout(height):
+    def get_mttc_layout(height, title):
         layout_local = go.Layout(
-            height=height, yaxis=dict(range=[0, None], showticklabels=False)
+            height=height,
+            title=dict(text=title),
+            yaxis=dict(
+                range=[0, None],
+                showgrid=False,
+                showticklabels=False,
+                zerolinewidth=2,
+                zerolinecolor=config_plotly.GRAY_CLR,
+            ),
+            xaxis=dict(showgrid=False),
+            margin=dict(l=70, r=70, t=70, b=70),
         )
         return layout_local
 
@@ -262,42 +275,49 @@ with tabs[2]:  # OEQG
             y=target, line=dict(color=config_plotly.NEGATIVE_CLR, dash="dash")
         )
 
-    cols = st.columns([4, 2, 2], gap="large", vertical_alignment="center")
+    cols = st.columns([2, 7], gap="large", vertical_alignment="center")
 
-    cols[0].subheader("MTTC")
-    trace = get_mttc_bar_trace("MTTC")
-    layout = get_mttc_layout(height=500)
+    cols[0].plotly_chart(
+        viz.draw_three_years_mttc(df_global_yearly),
+        use_container_width=True,
+        key="MTTC_BAR_2",
+    )
+
+    cols[1].plotly_chart(
+        viz.draw_goeq_view_mttc_compare(df_goeq_yearly_pre, df_goeq_yearly)
+    )
+
+    # trace = get_mttc_bar_trace("MTTC")
+    # layout = get_mttc_layout(height=300, title="MTTC")
+    # fig = go.Figure(data=trace, layout=layout)
+    # draw_target_line(fig, target=10)
+    # cols[1].plotly_chart(fig)
+
+    cols = st.columns(4, gap="large")
+
+    trace = get_mttc_bar_trace("REG_PRD")
+    layout = get_mttc_layout(height=300, title="Registration")
     fig = go.Figure(data=trace, layout=layout)
-    draw_target_line(fig, target=10)
+    draw_target_line(fig, target=2)
     cols[0].plotly_chart(fig)
 
-    cols[1].subheader("REG_PRD")
-    trace = get_mttc_bar_trace("REG_PRD")
-    layout = get_mttc_layout(height=300)
-    fig = go.Figure(data=trace, layout=layout)
-    draw_target_line(fig, target=2)
-    cols[1].plotly_chart(fig)
-
-    cols[1].subheader("CTM_PRD")
     trace = get_mttc_bar_trace("CTM_PRD")
-    layout = get_mttc_layout(height=300)
+    layout = get_mttc_layout(height=300, title="Countermeasure")
     fig = go.Figure(data=trace, layout=layout)
     draw_target_line(fig, target=5)
-    cols[1].plotly_chart(fig)
+    cols[2].plotly_chart(fig, use_container_width=True)
 
-    cols[2].subheader("RTN_PRD")
     trace = get_mttc_bar_trace("RTN_PRD")
-    layout = get_mttc_layout(height=300)
+    layout = get_mttc_layout(height=300, title="Return")
     fig = go.Figure(data=trace, layout=layout)
     draw_target_line(fig, target=7)
-    cols[2].plotly_chart(fig)
+    cols[1].plotly_chart(fig)
 
-    cols[2].subheader("COMP_PRD")
     trace = get_mttc_bar_trace("COMP_PRD")
-    layout = get_mttc_layout(height=300)
+    layout = get_mttc_layout(height=300, title="8D Report")
     fig = go.Figure(data=trace, layout=layout)
     draw_target_line(fig, target=2)
-    cols[2].plotly_chart(fig)
+    cols[3].plotly_chart(fig)
 
 with tabs[3]:  # RAWDATA
     st.subheader("Raw Data[Qaulity Issue]")

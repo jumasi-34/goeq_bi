@@ -23,6 +23,13 @@ CTE_HOPE_SELL_IN = """
         SUBSTRING(BILMON, 5, 2)
 """
 
+# ! 사용후 삭제
+CTE_HOPE_SELL_All = """
+    SELECT *
+    FROM HKT_DW.BI_DWUSER.SAP_ZSDT02068
+    WHERE SUBSTRING(BILMON, 1, 4) = 2024
+"""
+
 
 def sellin_3_years(year):
     query = f"""--sql

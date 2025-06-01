@@ -42,6 +42,9 @@ CTE_CQMS_4M_MAIN = f"""--sql
 """
 CTE_CQMS_4M_MATERIAL = """--sql
     SELECT DISTINCT
+        ID,
+        M_SIZE,
+        M_PATTERN,
         DOCUMENT_NO DOC_NO,
         M_CODE
     FROM HKT_DW.EQMSUSER.CQMS_SUB_MCODE_D

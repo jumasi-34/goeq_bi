@@ -64,4 +64,16 @@ PAGE_CONFIGS = {
         "category": "Setting",
         "roles": ["Admin"],
     },
+    "TEST": {
+        "filename": "_04_pages/test.py",
+        "icon": ":material/query_stats:",
+        "category": "Setting",
+        "roles": ["Admin"],
+    },
+        "Login History Access": {
+        "filename": "_04_pages/ui_902_assess_log_temp.py",
+        "icon": ":material/query_stats:",
+        "category": "Setting",
+        "roles": ["Admin"],
+    },
 }

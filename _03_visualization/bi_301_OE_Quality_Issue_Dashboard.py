@@ -21,6 +21,7 @@ from _02_preprocessing.CQMS.df_quality_issue import (
     aggregate_oeqi_by_global_monthly,
     load_quality_issues_for_3_years,
     aggregate_oeqi_by_global_yearly,
+    aggregate_oeqi_by_goeq_yearly,
 )
 from _03_visualization import config_plotly, helper_plotly
 from _05_commons import config
@@ -42,6 +43,8 @@ global_monthly_oeqi = aggregate_oeqi_by_global_monthly(selected_year)
 global_yearly_oeqi = aggregate_oeqi_by_global_yearly(selected_year)
 oeqi_3years = load_quality_issues_for_3_years(selected_year)
 df_mttc = oeqi_3years.copy()
+df_goeq_yearly = aggregate_oeqi_by_goeq_yearly(selected_year)
+df_goeq_yearly_pre = aggregate_oeqi_by_goeq_yearly(selected_year - 1)
 df_mttc = df_mttc[df_mttc["YYYY"] == selected_year]
 df_mttc = (
     df_mttc.groupby("YYYY")[["REG_PRD", "RTN_PRD", "CTM_PRD", "COMP_PRD", "MTTC"]]
@@ -730,6 +733,7 @@ def draw_goeq_view_issue_count_monthly_trend(df):
             text=subset["count"],
             name=group,
             texttemplate="%{text:.0f}",
+            textposition="outside",
             marker=dict(color=config_plotly.multi_color_lst[i]),
         )
         traces.append(trace)
@@ -744,7 +748,13 @@ def draw_goeq_view_issue_count_monthly_trend(df):
             ticktext=config_plotly.months_abbreviation,
             range=[0.5, 12.5],
         ),
-        legend=dict(orientation="h", yanchor="top", y=1.2),
+        yaxis=dict(
+            showgrid=False,
+            showticklabels=False,
+            domain=[0, 0.8],
+            range=[0, max(df["count"]) * 1.2],
+        ),
+        legend=dict(orientation="h", yanchor="top", y=1.0, xanchor="right", x=1.0),
     )
     fig = go.Figure(traces, layout)
     return fig
@@ -759,9 +769,10 @@ def draw_goeq_view_oeqi_monthly_trend(df):
             x=subset["MM"],
             y=subset["OEQI"],
             text=subset["OEQI"],
+            textposition="top center",
+            texttemplate="%{text:.1f}",
             mode="markers + lines + text",
             name=group,
-            texttemplate="%{text:.0f}",
             marker=dict(color=config_plotly.multi_color_lst[i]),
         )
         traces.append(trace)
@@ -770,13 +781,19 @@ def draw_goeq_view_oeqi_monthly_trend(df):
         title_text="Monthly OEQI by Local OE Quality Team",
         xaxis_title="Month",
         yaxis_title="Number of Quality Issue",
+        yaxis=dict(
+            showgrid=False,
+            showticklabels=False,
+            domain=[0, 0.8],
+            range=[0, max(df["OEQI"]) * 1.2],
+        ),
         xaxis=dict(
             tickmode="array",
             tickvals=list(range(1, 13)),
             ticktext=config_plotly.months_abbreviation,
             range=[0.5, 12.5],
         ),
-        legend=dict(orientation="h", yanchor="top", y=1.2),
+        legend=dict(orientation="h", yanchor="top", y=1.0, xanchor="right", x=1.0),
     )
     fig = go.Figure(traces, layout)
     return fig
@@ -784,13 +801,14 @@ def draw_goeq_view_oeqi_monthly_trend(df):
 
 def draw_goeq_view_mttc_summary(df):
     mttc_cols = ["MTTC", "REG_PRD", "RTN_PRD", "CTM_PRD", "COMP_PRD"]
+    titles = ["a", "b", "c", "d", "e"]
     df["OEQ GROUP"] = pd.Categorical(
         values=df["OEQ GROUP"], ordered=True, categories=config.oeqg_codes
     )
     df = df.sort_values(by="OEQ GROUP")
     figs = []
     for group in config.oeqg_codes:
-        for item, ref in zip(mttc_cols, [10, 2, 7, 5, 2]):
+        for item, ref, title in zip(mttc_cols, [10, 2, 7, 5, 2], titles):
             trace = generate_indicator(
                 target=df.loc[df["OEQ GROUP"] == group, item],
                 reference=ref,
@@ -800,6 +818,41 @@ def draw_goeq_view_mttc_summary(df):
             fig = go.Figure(trace, layout)
             figs.append(fig)
     return figs
+
+
+def draw_goeq_view_mttc_compare(df_1, df_2):
+    trace_1 = go.Bar(
+        y=df_1["MTTC"],
+        x=df_1["OEQ GROUP"],
+        text=df_1["MTTC"],
+        texttemplate="%{text:.1f}",
+        name=selected_year - 1,
+        marker=dict(color=config_plotly.GRAY_CLR),
+    )
+    trace_2 = go.Bar(
+        y=df_2["MTTC"],
+        x=df_2["OEQ GROUP"],
+        text=df_2["MTTC"],
+        texttemplate="%{text:.1f}",
+        name=selected_year,
+        marker=dict(color=config_plotly.ORANGE_CLR),
+    )
+    layout = go.Layout(
+        height=300,
+        title=dict(text="MTTC"),
+        yaxis=dict(
+            range=[0, None],
+            showgrid=False,
+            showticklabels=False,
+            zerolinewidth=2,
+            zerolinecolor=config_plotly.GRAY_CLR,
+        ),
+        xaxis=dict(showgrid=False),
+        margin=dict(l=70, r=70, t=70, b=70),
+    )
+    fig = go.Figure(data=[trace_1, trace_2], layout=layout)
+    fig = fig.add_hline(y=10, line=dict(color=config_plotly.NEGATIVE_CLR, dash="dash"))
+    return fig
 
 
 # ================================
