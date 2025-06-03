@@ -7,11 +7,13 @@ Plotly 시각화 설정
 포함된 항목:
 - 월 이름 약어 리스트
 - 색상 상수 및 RGBA 값 (긍정/부정/회색 계열 등)
+- 차트 스타일 및 레이아웃 설정
 
 사용처 예시:
 - Plotly 그래프의 색상 통일
 - 시계열 차트 범위 지정
 - 월별 축 라벨링
+- 차트 스타일 및 레이아웃 통일
 """
 
 from datetime import datetime, timedelta
@@ -53,3 +55,34 @@ multi_color_lst = [
     "#AAAAAA",
     "#AAAAAA",
 ]
+
+## Chart Style Settings
+CHART_STYLES = {
+    "pie": {
+        "textinfo": "label+value",
+        "direction": "clockwise",
+        "line_width": 0.5,
+        "hover_template": """<b>Plant</b>: %{label}<br><b>Count</b>: %{value}<br><b>Possession</b>: %{percent:.1%}<extra></extra>""",
+    },
+    "bar": {
+        "text_position": "outside",
+        "hover_template": """<b>Month</b>: %{x|%b. %Y}<br><b>Count</b>: %{y:.0f}EA<extra></extra>""",
+    },
+}
+
+## Layout Settings
+LAYOUT_STYLES = {
+    "pie": {"showlegend": False},
+    "bar": {
+        "yaxis": {"showgrid": False, "showticklabels": False},
+        "xaxis": {"tickmode": "array"},
+        "showlegend": False,
+    },
+}
+
+## Chart Titles
+CHART_TITLES = {
+    "ongoing_qi": {"pie": "Opening status by plant", "bar": "Monthly openings"},
+    "ongoing_4m": {"pie": "Opening status by plant", "bar": "Monthly openings"},
+    "ongoing_audit": {"pie": "Opening status by plant", "bar": "Monthly openings"},
+}
