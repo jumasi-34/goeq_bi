@@ -1,7 +1,23 @@
 """
-DB Client별 쿼리를 실행하는 다양한 데이터베이스 클라이언트 클래스들을 제공합니다.
+데이터베이스 클라이언트 모듈
 
-이 모듈은 Snowflake, Oracle(BI 및 MES), SQLite 데이터베이스에 연결하여 쿼리를 실행하고 결과를 pandas DataFrame으로 반환하는 클래스를 포함하고 있습니다.
+이 모듈은 다양한 데이터베이스 시스템과의 연결 및 쿼리 실행을 위한 클라이언트 클래스들을 제공합니다.
+주요 기능:
+- Snowflake, Oracle(BI/MES), SQLite 등 다양한 DB 시스템 지원
+- 데이터베이스 연결 및 쿼리 실행
+- 쿼리 결과를 pandas DataFrame으로 변환
+- Streamlit 환경에서의 캐싱 지원
+
+사용 예시:
+    from db_client import get_client
+    
+    # Snowflake 클라이언트 생성
+    sf_client = get_client('snowflake')
+    df = sf_client.execute_query("SELECT * FROM table")
+    
+    # Oracle BI 클라이언트 생성
+    oracle_client = get_client('oracle_bi')
+    df = oracle_client.execute_query("SELECT * FROM table")
 
 클라이언트 클래스들:
     - SnowflakeClient: Snowflake 데이터베이스와 연결하여 쿼리 실행

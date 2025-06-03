@@ -828,6 +828,7 @@ def draw_goeq_view_mttc_compare(df_1, df_2):
         texttemplate="%{text:.1f}",
         name=selected_year - 1,
         marker=dict(color=config_plotly.GRAY_CLR),
+        width=0.35,  # 바 폭 조정
     )
     trace_2 = go.Bar(
         y=df_2["MTTC"],
@@ -836,6 +837,7 @@ def draw_goeq_view_mttc_compare(df_1, df_2):
         texttemplate="%{text:.1f}",
         name=selected_year,
         marker=dict(color=config_plotly.ORANGE_CLR),
+        width=0.35,  # 바 폭 조정
     )
     layout = go.Layout(
         height=300,
@@ -849,6 +851,8 @@ def draw_goeq_view_mttc_compare(df_1, df_2):
         ),
         xaxis=dict(showgrid=False),
         margin=dict(l=70, r=70, t=70, b=70),
+        bargap=0.2,  # 바 사이 간격 조정
+        bargroupgap=0.1,  # 그룹 간 간격 조정
     )
     fig = go.Figure(data=[trace_1, trace_2], layout=layout)
     fig = fig.add_hline(y=10, line=dict(color=config_plotly.NEGATIVE_CLR, dash="dash"))

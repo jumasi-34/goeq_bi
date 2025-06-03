@@ -3,38 +3,63 @@
 
 이 모듈은 앱 전반에 걸쳐 공통으로 사용되는 전역 상수들을 정의합니다.
 
-포함된 항목:
-- SQLite DB 경로 및 개발 모드 여부
-- 날짜 기준값 (오늘, 일주일 전, 1년 전)
-- 공장 코드 목록 및 OEQ 그룹 분류
+주요 기능:
+- 시스템 설정 (DB 경로, 개발 모드)
+- 날짜 관련 상수 정의
+- 공장 및 OEQ 그룹 관련 상수 정의
 
-사용처 예시:
-- DB 접근 (`SQLITE_DB_PATH`)
-- MTTC 계산 기준일 (`today`, `a_week_ago`)
-- 시각화 또는 필터 기준 (`plant_codes`, `oeqg_codes`)
+상세 설명:
+1. 시스템 설정
+   - SQLITE_DB_PATH: SQLite 데이터베이스 파일 경로
+   - DEV_MODE: 개발 모드 활성화 여부
+
+2. 날짜 관련 상수
+   - today: 현재 날짜/시간
+   - today_str: YYYY-MM-DD 형식의 현재 날짜 문자열
+   - this_year: 현재 연도
+   - one_year_ago: 1년 전 날짜
+   - a_week_ago: 1주일 전 날짜
+
+3. 공장 및 OEQ 그룹 관련 상수
+   - plant_codes: 공장 코드 목록
+   - plant_oeqg_dict: 공장별 OEQ 그룹 매핑
+   - oeqg_codes: OEQ 그룹 코드 목록
+
+사용 예시:
+    from _05_commons import config
+    
+    # DB 접근
+    db_path = config.SQLITE_DB_PATH
+    
+    # MTTC 계산
+    mttc = calculate_mttc(config.today, config.a_week_ago)
+    
+    # 공장 필터링
+    filtered_plants = [p for p in config.plant_codes if p in config.plant_oeqg_dict]
 """
 
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import Dict, List
 
 # 시스템 설정
-SQLITE_DB_PATH = "../database/goeq_database.db"
-DEV_MODE = True
+SQLITE_DB_PATH: str = "../database/goeq_database.db"
+DEV_MODE: bool = True
 
+# 날짜 관련 상수
+today: datetime = datetime.now()
+today_str: str = today.strftime("%Y-%m-%d")
+this_year: int = today.year
+one_year_ago: datetime = today - timedelta(days=365)
+a_week_ago: datetime = today - timedelta(days=7)
 
-# 날짜 관련 함수
-today = datetime.now()
-today_str = datetime.today().strftime("%Y-%m-%d")
+# 공장 관련 상수
+plant_codes: List[str] = ["DP", "KP", "JP", "HP", "CP", "MP", "IP", "TP", "OT"]
 
-this_year = today.year
-one_year_ago = today - timedelta(days=365)
-a_week_ago = today - timedelta(days=7)
-
-# List & Dictionary 모음
-plant_codes = ["DP", "KP", "JP", "HP", "CP", "MP", "IP", "TP", "OT"]
-plant_oeqg_dict = {
+# OEQ 그룹 관련 상수
+plant_oeqg_dict: Dict[str, str] = {
     "KP": "G.OE Quality",
-    "DP": "G.OE Quality",
+    "DP": "G.OE Quality", 
     "IP": "G.OE Quality",
     "JP": "China OE Quality",
     "HP": "China OE Quality",
@@ -42,4 +67,10 @@ plant_oeqg_dict = {
     "MP": "Europe OE Quality",
     "TP": "NA OE Quality",
 }
-oeqg_codes = ["G.OE Quality", "China OE Quality", "Europe OE Quality", "NA OE Quality"]
+
+oeqg_codes: List[str] = [
+    "G.OE Quality",
+    "China OE Quality", 
+    "Europe OE Quality",
+    "NA OE Quality"
+]
