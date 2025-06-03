@@ -1,0 +1,64 @@
+Metadata-Version: 2.4
+Name: cqms_query
+Version: 0.1.0
+Summary: CQMS Quality Issue Query Management Package
+Author: Your Name
+Author-email: your.email@example.com
+Classifier: Development Status :: 3 - Alpha
+Classifier: Intended Audience :: Developers
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
+Requires-Dist: pandas
+Requires-Dist: numpy
+Requires-Dist: sqlalchemy
+Dynamic: author
+Dynamic: author-email
+Dynamic: classifier
+Dynamic: description
+Dynamic: description-content-type
+Dynamic: requires-dist
+Dynamic: requires-python
+Dynamic: summary
+
+# CQMS Query Management Package
+
+CQMS(CQMS Quality Issue) 쿼리 관리 패키지입니다.
+
+## 기능
+
+- CQMS 품질 이슈 관리용 SQL 쿼리 템플릿 제공
+- 공장/이슈 영역/시장 코드 매핑
+- 대시보드/리포트용 메인 쿼리 생성
+
+## 데이터 소스
+
+- HKT_DW.EQMSUSER.CQMS_QUALITY_ISSUE
+- CQMS_ISSUE_CATEGORY_DATA
+- CQMS_QUALITY_ISSUE_MATERIAL
+- ZHRT90041
+
+## 설치 방법
+
+```bash
+pip install -e .
+```
+
+## 사용 방법
+
+```python
+from _01_query.CQMS.q_quality_issue import query_quality_issue
+
+# 특정 연도의 데이터 조회
+query = query_quality_issue(year=2024)
+```
+
+## 요구사항
+
+- Python 3.8 이상
+- pandas
+- numpy
+- sqlalchemy 

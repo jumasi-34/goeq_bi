@@ -1,5 +1,5 @@
 """
-Docstring
+CQMS 웹 애플리케이션 메인 모듈
 """
 
 import sys
@@ -8,6 +8,8 @@ import re
 from datetime import datetime
 from pathlib import Path
 import os
+import hashlib
+from typing import Dict, Optional
 
 os.environ["LD_LIBRARY_PATH"] = "/opt/oracle/instantclient_23_8"
 # 프로젝트 루트 추가
@@ -23,18 +25,31 @@ from _05_commons import config
 # 기본 설정
 st.set_page_config(layout="wide")
 ROLES = ["Viewer", "Contributor", "Admin"]
-PASSWORDS = {"Contributor": "1", "Admin": "2"}
 DB_PATH = config.SQLITE_DB_PATH
+
+
+# 비밀번호 해싱 함수
+def hash_password(password: str) -> str:
+    return hashlib.sha256(password.encode()).hexdigest()
+
+
+# 환경 변수나 설정 파일에서 비밀번호를 가져오도록 수정 필요
+PASSWORDS = {"Contributor": hash_password("1"), "Admin": hash_password("2")}
+
 db_dml = SQLiteDML()
 
 
 # 캐시된 DB 호출 함수 정의
-@st.cache_data(ttl=600)
+@st.cache_data(ttl=3600)  # 캐시 시간을 1시간으로 증가
 def load_personnel_df():
-    df = get_client("snowflake").execute(CTE_HR_PERSONAL)
-    df.columns = df.columns.str.upper()
-    df["PNL_NO"] = df["PNL_NO"].astype(int)
-    return df
+    try:
+        df = get_client("snowflake").execute(CTE_HR_PERSONAL)
+        df.columns = df.columns.str.upper()
+        df["PNL_NO"] = df["PNL_NO"].astype(int)
+        return df
+    except Exception as e:
+        st.error(f"데이터베이스 연결 오류: {str(e)}")
+        return None
 
 
 # session_state 초기화
@@ -59,7 +74,6 @@ def login():
     selected_role = st.selectbox("Choose your role", ROLES)
     personel_id_local = st.text_input("Personnel ID (8-digit number)", max_chars=8)
 
-    # 사번 존재 유무 확인
     if personel_id_local and not re.match(r"^\d{8}$", personel_id_local):
         st.warning("Please enter a valid 8-digit number.")
         return
@@ -69,24 +83,30 @@ def login():
 
     if selected_role in PASSWORDS:
         password = st.text_input("Enter your password", type="password")
-        is_pw_valid = password == PASSWORDS[selected_role]
+        is_pw_valid = password and hash_password(password) == PASSWORDS[selected_role]
 
     if st.button("Log in"):
         if not personel_id_local or not is_pw_valid:
             st.warning("Invalid login credentials.")
             return
 
-        st.session_state.role = selected_role
-        st.session_state.personel_id = int(personel_id_local)
-        st.session_state.password_verified = is_pw_valid
+        try:
+            st.session_state.role = selected_role
+            st.session_state.personel_id = int(personel_id_local)
+            st.session_state.password_verified = is_pw_valid
 
-        if not st.session_state.login_recorded:
-            db_dml.execute_query(
-                "INSERT INTO logins (employee_id, login_time) VALUES (?, ?)",
-                (int(personel_id_local), datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
-            )
-            st.session_state.login_recorded = True
-        st.rerun()
+            if not st.session_state.login_recorded:
+                db_dml.execute_query(
+                    "INSERT INTO logins (employee_id, login_time) VALUES (?, ?)",
+                    (
+                        int(personel_id_local),
+                        datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    ),
+                )
+                st.session_state.login_recorded = True
+            st.rerun()
+        except Exception as e:
+            st.error(f"로그인 처리 중 오류가 발생했습니다: {str(e)}")
 
 
 # 로그아웃 함수

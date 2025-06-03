@@ -1,13 +1,21 @@
 """
-CQMS Quality Issue 쿼리 관리
+CQMS Quality Issue 쿼리 관리 모듈
+
+- CQMS 품질 이슈 관리용 SQL 쿼리 템플릿과 유틸리티를 제공합니다.
+- 공장/이슈 영역/시장 코드를 매핑하고, 대시보드/리포트용 메인 쿼리를 생성합니다.
+- 데이터 소스: HKT_DW.EQMSUSER.CQMS_QUALITY_ISSUE, CQMS_ISSUE_CATEGORY_DATA, CQMS_QUALITY_ISSUE_MATERIAL, ZHRT90041
+
+작성자: [Your Name]
 """
 
 import sys
+from typing import Optional
 
-sys.path.append(r"D:\OneDrive - HKNC\@ Project_CQMS\# Workstation_2")
+# 절대 경로로 임포트 수정
 from _01_query.helper_sql import convert_dict_to_decode, test_query_by_itself
 
-dic_plant_to_oeqg = {  # PLANT <> OEQG
+# --- 코드 매핑 상수 정의 ---
+PLANT_TO_OEQG_DICT = {  # PLANT <> OEQG
     "KP": "G.OE Quality",
     "DP": "G.OE Quality",
     "IP": "G.OE Quality",
@@ -17,9 +25,9 @@ dic_plant_to_oeqg = {  # PLANT <> OEQG
     "MP": "Europe OE Quality",
     "TP": "NA OE Quality",
 }
-DECODE_PLANT_TO_OEQG = convert_dict_to_decode(dic_plant_to_oeqg)
+DECODE_PLANT_TO_OEQG = convert_dict_to_decode(PLANT_TO_OEQG_DICT)
 
-dic_issue_cd_to_area = {
+ISSUE_AREA_DICT = {
     "01": "In-Line(OE)",
     "02": "Field",
     "03": "Warehouse",
@@ -27,9 +35,9 @@ dic_issue_cd_to_area = {
     "05": "Internal",
     "06": "Non-official(In-line)",
 }
-DECODE_ISSUE_CD_TO_AREA = convert_dict_to_decode(dic_issue_cd_to_area)
+DECODE_ISSUE_AREA = convert_dict_to_decode(ISSUE_AREA_DICT)
 
-dic_issue_area_to_kpi = {  # ISSUE_AREA CODE <> KPI
+KPI_INCLUSION_DICT = {  # ISSUE_AREA CODE <> KPI
     "01": "Include",
     "02": "Include",
     "03": "Include",
@@ -37,9 +45,9 @@ dic_issue_area_to_kpi = {  # ISSUE_AREA CODE <> KPI
     "05": "Exclude",
     "06": "Exclude",
 }
-DECODE_ISSUE_AREA_TO_KPI = convert_dict_to_decode(dic_issue_area_to_kpi)
+DECODE_KPI_INCLUSION = convert_dict_to_decode(KPI_INCLUSION_DICT)
 
-dic_issue_market = {
+MARKET_DICT = {
     "01": "Europe",
     "02": "Africa",
     "03": "ASIA(China)",
@@ -51,10 +59,9 @@ dic_issue_market = {
     "09": "South America",
     "10": "ETC",
 }
-DECODE_CODE_TO_MARKET = convert_dict_to_decode(dic_issue_market)
+DECODE_MARKET = convert_dict_to_decode(MARKET_DICT)
 
-# CTE
-
+# --- SQL 쿼리 템플릿 정의 ---
 CTE_CQMS_QI_MAIN = f"""--sql
     SELECT
         CQMS_ISSUE_DOCUMENT_NO "DOC_NO",
@@ -83,9 +90,9 @@ CTE_CQMS_QI_MAIN = f"""--sql
             'ISSUE_PROCESS_COMPLETE',
             'Complete',
             'On-going') STATUS,
-        DECODE(ISSUE_AREA, {DECODE_ISSUE_CD_TO_AREA}) LOCATION,
-        DECODE(ISSUE_AREA, {DECODE_ISSUE_AREA_TO_KPI}) KPI,
-        DECODE(ISSUE_REGION, {DECODE_CODE_TO_MARKET}) MARKET,
+        DECODE(ISSUE_AREA, {DECODE_ISSUE_AREA}) LOCATION,
+        DECODE(ISSUE_AREA, {DECODE_KPI_INCLUSION}) KPI,
+        DECODE(ISSUE_REGION, {DECODE_MARKET}) MARKET,
         CQMS_QUALITY_ISSUE_SEQ SEQ
     FROM HKT_DW.EQMSUSER.CQMS_QUALITY_ISSUE
     WHERE 1=1
@@ -116,8 +123,20 @@ CTE_HR_PERSONAL = """--sql
 """
 
 
-# Query
-def query_quality_issue(year=None):
+def query_quality_issue(year: Optional[int] = None) -> str:
+    """
+    품질 이슈 데이터를 조회하는 SQL 쿼리를 생성합니다.
+
+    Parameters
+    ----------
+    year : Optional[int], optional
+        조회할 연도. 기본값은 None이며, 지정 시 해당 연도와 그 전 2년간의 데이터를 조회합니다.
+
+    Returns
+    -------
+    str
+        CTE를 포함한 SQL 쿼리 문자열을 반환합니다.
+    """
     query = f"""--sql
     WITH 
         QI AS ({CTE_CQMS_QI_MAIN}),
@@ -145,7 +164,10 @@ def query_quality_issue(year=None):
     return query
 
 
-def main():
+def main() -> None:
+    """
+    test_query_by_itself 유틸리티를 사용하여 품질 이슈 쿼리를 단독 실행합니다.
+    """
     test_query_by_itself(query_quality_issue)
 
 

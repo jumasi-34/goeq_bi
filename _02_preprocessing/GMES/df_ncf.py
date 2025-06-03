@@ -10,8 +10,7 @@ import pandas as pd
 
 sys.path.append(r"D:\OneDrive - HKNC\@ Project_CQMS\# Workstation_2")
 from _00_database.db_client import get_client
-from _01_query.GMES import q_production
-from _01_query.GMES import q_ncf
+from _01_query.GMES import q_production, q_ncf
 from _02_preprocessing import config_pandas
 from _05_commons import config
 from _02_preprocessing.helper_pandas import CountWorkingDays, test_dataframe_by_itself
