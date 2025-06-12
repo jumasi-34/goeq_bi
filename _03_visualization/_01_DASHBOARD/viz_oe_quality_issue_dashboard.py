@@ -252,6 +252,27 @@ def draw_pie_issue_count_by_market(df, selected_year):
 # ================================
 # 🏭 3. Plant 단위 시각화 함수 (draw_)
 # ================================
+def draw_sku_by_plant(df):
+    trace = go.Bar(
+        y=df["plant"],
+        x=df["m_code"],
+        text=df["m_code"],
+        marker=dict(color=config_plotly.GRAY_CLR),
+        texttemplate="%{text:.0f}",
+        orientation="h",
+        hovertemplate="<b>Plant:</b> %{y}<br><b>SKU:</b> %{x:,} EA<extra></extra>",
+    )
+    layout = go.Layout(
+        height=350,
+        title_text="OE SKU",
+        xaxis_title="SKU",
+        xaxis=dict(showticklabels=False, showgrid=True),
+        yaxis=dict(categoryorder="total ascending"),
+    )
+    fig = go.Figure(trace, layout)
+    return fig
+
+
 def draw_supply_quantity_by_plant(df):
     fig = go.Figure()
     fig.add_trace(

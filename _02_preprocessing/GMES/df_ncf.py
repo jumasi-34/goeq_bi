@@ -56,17 +56,61 @@ fm_ncf_list = [
 
 
 def get_yearly_production_df(yyyy):
-    df = get_client("snowflake").execute(q_production.curing_prdt_monthly(yyyy=yyyy))
+    """연도별 생산 데이터를 조회합니다.
+
+    Args:
+        yyyy (int): 조회할 연도
+
+    Returns:
+        pd.DataFrame: 생산 데이터프레임
+    """
+    query = f"""--sql
+    SELECT 
+        PLT_CD AS PLANT,
+        SUM(PRDT_QTY) AS PRDT_QTY
+    FROM HKT_DW.MES.WRK_F_LWRKTS118
+    WHERE 1=1
+        AND SUBSTRING(WRK_DATE, 1, 4) = '{yyyy}'
+    GROUP BY PLT_CD
+    """
+    df = get_client("snowflake").execute(query)
+    df.columns = df.columns.str.upper()
+    return df
+
+
+def get_monthly_fm_ncf_df(yyyy, ncf_list=fm_ncf_list):
+    query = q_ncf.ncf_monthly(yyyy=yyyy, ncf_list=ncf_list)
+    df = get_client("snowflake").execute(query)
     df.columns = df.columns.str.upper()
     return df
 
 
 def get_yearly_ncf_df(yyyy, ncf_list=fm_ncf_list):
-    ncf_list_str = ", ".join(f"'{x}'" for x in ncf_list)
-    query = q_ncf.ncf_monthly(yyyy=yyyy, ncf_list=ncf_list_str)
+    """
+    연도별 부적합 데이터를 조회합니다.
+
+    Parameters
+    ----------
+    yyyy : int
+        조회할 연도
+    ncf_list : list, optional
+        조회할 부적합 코드 리스트. 기본값은 fm_ncf_list
+
+    Returns
+    -------
+    pandas.DataFrame
+        부적합 데이터프레임
+
+    Raises
+    ------
+    ValueError
+        ncf_list가 비어있거나 None인 경우
+    """
+
+    # 부적합 코드 리스트를 SQL IN 절에 사용할 수 있는 문자열로 변환
+    query = q_ncf.ncf_monthly(yyyy=yyyy, ncf_list=fm_ncf_list)
     df = get_client("snowflake").execute(query)
     df.columns = df.columns.str.upper()
-
     return df
 
 
@@ -90,7 +134,7 @@ def get_yearly_ppm_df(yyyy, ncf_list=fm_ncf_list):
 
 
 def get_monthly_ppm_by_plant_df(yyyy, selected_plant, ncf_list=fm_ncf_list):
-    df_prdt = get_yearly_production_df(yyyy=yyyy)
+    df_prdt = q_production.get_yearly_production_df(yyyy=yyyy)
     df_prdt = (
         df_prdt[df_prdt["PLANT"] == selected_plant]
         .groupby("MM", as_index=False)["PRDT_QTY"]

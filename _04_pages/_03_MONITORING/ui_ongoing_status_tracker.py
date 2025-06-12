@@ -21,7 +21,7 @@ sys.path.append(r"D:\OneDrive - HKNC\@ Project_CQMS\# Workstation_2")
 
 from _05_commons import config
 from _02_preprocessing.CQMS import df_quality_issue, df_4m_change, df_customer_audit
-from _03_visualization import bi_202_ongoing_status_tracker
+from _03_visualization._03_MONITORING import viz_ongoing_status_tracker
 
 
 def reload_modules():
@@ -41,7 +41,7 @@ def reload_modules():
         importlib.reload(df_quality_issue)
         importlib.reload(df_4m_change)
         importlib.reload(df_customer_audit)
-        importlib.reload(bi_202_ongoing_status_tracker)
+        importlib.reload(viz_ongoing_status_tracker)
 
 
 def setup_common_ui():
@@ -129,8 +129,8 @@ qi_column_config = {
 display_section(
     "Quality Issue",
     len(qi_df),
-    bi_202_ongoing_status_tracker.ongoing_qi_pie_by_plant,
-    bi_202_ongoing_status_tracker.ongoing_qi_bar_by_month,
+    viz_ongoing_status_tracker.ongoing_qi_pie_by_plant,
+    viz_ongoing_status_tracker.ongoing_qi_bar_by_month,
     qi_df,
     qi_columns,
     qi_column_config,
@@ -161,8 +161,8 @@ m4_column_config = {
 display_section(
     "4M Change",
     len(filtered_df),
-    bi_202_ongoing_status_tracker.ongoing_4m_pie_by_plant,
-    bi_202_ongoing_status_tracker.ongoing_4m_bar_by_month,
+    viz_ongoing_status_tracker.ongoing_4m_pie_by_plant,
+    viz_ongoing_status_tracker.ongoing_4m_bar_by_month,
     filtered_df,
     m4_columns,
     m4_column_config,
@@ -214,8 +214,8 @@ audit_column_config = {
 display_section(
     "OE Audit",
     len(audit_df),
-    bi_202_ongoing_status_tracker.ongoing_audit_pie_by_plant,
-    bi_202_ongoing_status_tracker.ongoing_audit_bar_by_month,
+    viz_ongoing_status_tracker.ongoing_audit_pie_by_plant,
+    viz_ongoing_status_tracker.ongoing_audit_bar_by_month,
     audit_df,
     audit_columns,
     audit_column_config,

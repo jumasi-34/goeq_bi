@@ -11,7 +11,7 @@ sys.path.append(r"D:\OneDrive - HKNC\@ Project_CQMS\# Workstation_2")
 
 from _05_commons import config
 from _02_preprocessing.CQMS import df_quality_issue, df_4m_change, df_customer_audit
-from _03_visualization import bi_201_weekly_cqms_monitor
+from _03_visualization._03_MONITORING import viz_weekly_cqms_monitor
 
 if config.DEV_MODE:
     import importlib
@@ -19,7 +19,7 @@ if config.DEV_MODE:
     importlib.reload(df_quality_issue)
     importlib.reload(df_4m_change)
     importlib.reload(df_customer_audit)
-    importlib.reload(bi_201_weekly_cqms_monitor)
+    importlib.reload(viz_weekly_cqms_monitor)
 
 # Initialize page layout and tabs
 tabs = st.tabs(["Weekly Work Place"])
@@ -166,7 +166,7 @@ with tabs[0]:
 
     # 히트맵 표시
     with cols[0]:
-        fig = bi_201_weekly_cqms_monitor.heatmap_qi_weekly(start_of_week, end_of_week)
+        fig = viz_weekly_cqms_monitor.heatmap_qi_weekly(start_of_week, end_of_week)
         st.plotly_chart(fig, use_container_width=True)
 
     # 데이터프레임 표시
@@ -238,7 +238,7 @@ with tabs[0]:
 
     # 히트맵 표시
     with cols[0]:
-        fig = bi_201_weekly_cqms_monitor.heatmap_4m_weekly(start_of_week, end_of_week)
+        fig = viz_weekly_cqms_monitor.heatmap_4m_weekly(start_of_week, end_of_week)
         st.plotly_chart(fig, use_container_width=True)
 
     # 데이터프레임 표시
@@ -300,9 +300,7 @@ with tabs[0]:
 
     # 왼쪽 컬럼: 히트맵 시각화
     with cols[0]:
-        fig = bi_201_weekly_cqms_monitor.heatmap_audit_weekly(
-            start_of_week, end_of_week
-        )
+        fig = viz_weekly_cqms_monitor.heatmap_audit_weekly(start_of_week, end_of_week)
         st.plotly_chart(fig, use_container_width=True)
 
     # 오른쪽 컬럼: 데이터 필터링 및 테이블 표시

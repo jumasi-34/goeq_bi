@@ -10,11 +10,11 @@
 
 사용 예시:
     from db_client import get_client
-    
+
     # Snowflake 클라이언트 생성
     sf_client = get_client('snowflake')
     df = sf_client.execute_query("SELECT * FROM table")
-    
+
     # Oracle BI 클라이언트 생성
     oracle_client = get_client('oracle_bi')
     df = oracle_client.execute_query("SELECT * FROM table")
@@ -35,7 +35,7 @@ from dotenv import load_dotenv
 from functools import wraps
 import pandas as pd
 import streamlit as st
-import sqlite3  
+import sqlite3
 from sqlalchemy import create_engine
 from pathlib import Path
 
@@ -72,7 +72,7 @@ class SnowflakeClient:
     """
 
     def __init__(self):
-        
+
         self.config = {
             "user": os.getenv("SF_USER"),
             "password": os.getenv("SF_PASSWORD"),
@@ -81,7 +81,7 @@ class SnowflakeClient:
             "database": os.getenv("SF_DATABASE"),
             "schema": os.getenv("SF_SCHEMA"),
         }
-        
+
     def execute(self, query: str):
         """
         Snowflake에 연결하여 쿼리를 실행한 후 DataFrame으로 반환합니다.
@@ -159,6 +159,20 @@ class SQLiteClient:
         conn = sqlite3.connect(self.db_path)
         try:
             return pd.read_sql(query, conn)
+        finally:
+            conn.close()
+
+    def insert_dataframe(self, df: pd.DataFrame, table_name: str):
+        """
+        DataFrame을 SQLite 테이블에 삽입합니다.
+
+        Args:
+            df: 삽입할 DataFrame
+            table_name: 대상 테이블 이름
+        """
+        conn = sqlite3.connect(self.db_path)
+        try:
+            df.to_sql(table_name, conn, if_exists="replace", index=False)
         finally:
             conn.close()
 

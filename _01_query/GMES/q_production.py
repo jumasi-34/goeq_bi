@@ -43,14 +43,78 @@ CTE_MES_PRODUCTION_MONTHLY = """--sql
         SUBSTRING(WRK_DATE, 5, 2)
     """
 
+CTE_MES_PRODUCTION_DAILY = """--sql
+    SELECT
+        PLT_CD PLANT,                      -- 공장지 코드
+        SPEC_CD,                           -- SPEC 코드
+        WRK_DATE,                          -- 작업일자
+        PRDT_QTY                           -- 생산량
+    FROM HKT_DW.MES.WRK_F_LWRKTS118
+    WHERE 1=1
+        AND SPEC_CD LIKE 'KT%'
+"""
 
-def curing_prdt_monthly(
+
+def curing_prdt_daily(
+    mcode_list: Optional[List[str]] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+) -> str:
+    """
+    시작일자와 종료일자 기준으로 일별 생산 현황을 조회하는 SQL 쿼리를 생성합니다.
+    WRK_DATE 기준으로 PRDT_QTY를 합계하여 반환합니다.
+
+    Parameters
+    ----------
+    mcode_list : Optional[List[str]], optional
+        조회할 제품 코드 리스트. 기본값은 None
+    start_date : Optional[str], optional
+        조회 시작일자 (YYYYMMDD 형식). 기본값은 None
+    end_date : Optional[str], optional
+        조회 종료일자 (YYYYMMDD 형식). 기본값은 None
+
+    Returns
+    -------
+    str
+        CTE를 포함한 SQL 쿼리 문자열을 반환합니다.
+    """
+
+    query = f"""--sql
+    WITH 
+        MAS AS ({CTE_MES_MASTER_ALL}),
+        PRDT_DAILY AS ({CTE_MES_PRODUCTION_DAILY})
+    SELECT
+        MAS.PLANT,
+        MAS.M_CODE,
+        MAS.SPEC_CD,
+        MAS.STXC,
+        PRDT_DAILY.WRK_DATE,
+        SUM(PRDT_DAILY.PRDT_QTY) AS PRDT_QTY     
+    FROM MAS
+    LEFT JOIN PRDT_DAILY
+        ON MAS.SPEC_CD = PRDT_DAILY.SPEC_CD 
+        AND MAS.PLANT = PRDT_DAILY.PLANT
+    WHERE 1=1
+        {f'AND MAS.M_CODE IN ({",".join(f"\'{m}\'" for m in mcode_list)})' if mcode_list else ""}
+        {f'AND PRDT_DAILY.WRK_DATE >= \'{start_date}\'' if start_date else ""}
+        {f'AND PRDT_DAILY.WRK_DATE <= \'{end_date}\'' if end_date else ""}
+    GROUP BY
+        MAS.PLANT,
+        MAS.M_CODE,
+        MAS.SPEC_CD,
+        MAS.STXC,
+        PRDT_DAILY.WRK_DATE
+    """
+    return query
+
+
+def curing_prdt_monthly_by_ym(
     mcode_list: Optional[List[str]] = None,
     yyyy: Optional[int] = None,
     mm: Optional[int] = None,
 ) -> str:
     """
-    월별 생산 현황을 조회하는 SQL 쿼리를 생성합니다.
+    연도와 월 기준으로 월별 생산 현황을 조회하는 SQL 쿼리를 생성합니다.
 
     Parameters
     ----------

@@ -20,8 +20,19 @@ selected_year = "2024"
 
 
 def plot_fm_ncf_qty_by_plant(yyyy):
+    """Visualizes annual FM non-conformance quantity by plant
 
+    Args:
+        yyyy (str): Year to analyze
+
+    Returns:
+        go.Figure: Bar graph showing FM non-conformance quantity by plant
+    """
     df = df_ncf.get_yearly_ppm_df(yyyy)
+
+    # Define hover template
+    hovertemplate = "Plant: %{x}<br>NCF Quantity: %{y:,.0f}<br>" + "<extra></extra>"
+
     fig = go.Figure()
     fig.add_trace(
         go.Bar(
@@ -31,23 +42,42 @@ def plot_fm_ncf_qty_by_plant(yyyy):
             texttemplate="%{y:,.0f}",
             textposition="outside",
             marker=dict(color=config_plotly.ORANGE_CLR),
+            hovertemplate=hovertemplate,
         )
     )
 
     fig.update_layout(
         title=dict(
-            text="공장별 FM 부적합 연간 발생 수량",
+            text="Annual FM Non-conformance Quantity by Plant",
             font=dict(color=config_plotly.GRAY_CLR),
+            x=0.05,
+            xanchor="left",
+            y=0.95,
         ),
+        hovermode="y unified",
     )
-    fig.update_yaxes(showgrid=False, showticklabels=False).update_xaxes(
-        domain=[0.1, 0.9]
-    )
+
+    fig.update_yaxes(showgrid=False, showticklabels=False, zeroline=False)
+
+    fig.update_xaxes(domain=[0.1, 0.9], tickangle=0)
+
     return fig
 
 
 def plot_fm_ppm_by_plant(yyyy):
+    """Visualizes annual FM non-conformance PPM (Parts Per Million) by plant
+
+    Args:
+        yyyy (str): Year to analyze
+
+    Returns:
+        go.Figure: Bar graph showing FM non-conformance PPM by plant
+    """
     df = df_ncf.get_yearly_ppm_df(yyyy)
+
+    # Define hover template
+    hovertemplate = "Plant: %{x}<br>PPM: %{y:,.0f}<br>" + "<extra></extra>"
+
     fig = go.Figure()
     fig.add_trace(
         go.Bar(
@@ -57,16 +87,25 @@ def plot_fm_ppm_by_plant(yyyy):
             texttemplate="%{y:,.0f}",
             textposition="outside",
             marker=dict(color=config_plotly.ORANGE_CLR),
+            hovertemplate=hovertemplate,
         )
     )
+
     fig.update_layout(
         title=dict(
-            text="공장별 FM 부적합 발생율 (PPM)",
+            text="Annual FM Non-conformance PPM by Plant",
             font=dict(color=config_plotly.GRAY_CLR),
+            x=0.05,
+            xanchor="left",
+            y=0.95,
         ),
+        hovermode="y unified",
     )
-    fig.update_yaxes(showgrid=False, showticklabels=False)
-    fig.update_xaxes(domain=[0.1, 0.9])
+
+    fig.update_yaxes(showgrid=False, showticklabels=False, zeroline=False)
+
+    fig.update_xaxes(domain=[0.1, 0.9], tickangle=0)
+
     return fig
 
 
@@ -106,7 +145,7 @@ def plot_monthly_fm_ppm_for_plant(year, plant):
         height=400,
         margin=dict(t=60, b=40, l=40, r=20),
         title=dict(
-            text=f"{selected_plant} 월별 FM 부적합 발생 현황",
+            text=f"{plant} 월별 FM 부적합 발생 현황",
             font=dict(color=config_plotly.GRAY_CLR),
         ),
     )
@@ -125,9 +164,12 @@ def plot_fm_ncf_by_defect_type_for_plant(yyyy, plant):
             textposition="outside",
             marker=dict(color=config_plotly.ORANGE_CLR),
         )
-    ).update_xaxes(dtick=1).update_yaxes(showgrid=False).update_layout(
+    )
+    fig.update_xaxes(dtick=1)
+    fig.update_yaxes(showgrid=False)
+    fig.update_layout(
         title=dict(
-            text=f"{selected_plant} 유형별 FM 부적합 발생 현황",
+            text=f"{plant} 유형별 FM 부적합 발생 현황",
             font=dict(color=config_plotly.GRAY_CLR),
         )
     )

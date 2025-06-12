@@ -105,3 +105,30 @@ def test_query_by_itself(
     except Exception as e:
         print(f"[ERROR] Failed to execute query: {e}")
         raise
+
+
+# 날짜 형식 변환 함수
+def format_date_to_yyyymmdd(date_str: str) -> str:
+    """
+    YYYY-MM-DD 형식의 날짜 문자열을 YYYYMMDD 형식으로 변환합니다.
+
+    Parameters
+    ----------
+    date_str : str
+        YYYY-MM-DD 형식의 날짜 문자열
+
+    Returns
+    -------
+    str
+        YYYYMMDD 형식의 날짜 문자열
+
+    Examples
+    --------
+    >>> format_date_to_yyyymmdd("2025-01-01")
+    '20250101'
+    """
+    try:
+        return date_str.replace("-", "")
+    except AttributeError:
+        print(f"[ERROR] Failed to format date: {date_str}")
+        return None

@@ -6,7 +6,7 @@ Streamlit 앱의 라우팅, 페이지 정보, 권한 등을 정의하는 설정 
 각 페이지는 다음 항목으로 구성됩니다:
 - filename: 페이지의 경로
 - title: 앱에서 보여질 제목
-- icon: Streamlit에서 사용할 아이콘 (emoji or material)
+- icon: Streamlit에서 사용할 아이콘 (material)
 - category: 페이지 분류 (탭 또는 섹션 기준)
 - roles: 접근 가능한 사용자 권한 수준
 
@@ -15,65 +15,104 @@ Streamlit 앱의 라우팅, 페이지 정보, 권한 등을 정의하는 설정 
 - 접근 제어를 위한 권한 필터링
 """
 
+"""
+- Dashboard
+- Analysis
+- Monitoring
+- Collaboration
+- User Guide
+- Workplace
+- Settings
+- Admin
+- System
+"""
+
 PAGE_CONFIGS = {
-    "Navigation": {
-        "filename": "_04_pages/ui_000_navigation.py",
-        "icon": ":material/autorenew:",
-        "category": "OE Quality BI",
+    # Dashboard
+    "OE Quality Issue Dashboard": {
+        "filename": "_04_pages/_01_DASHBOARD/ui_oe_quality_issue_dashboard.py",
+        "icon": ":material/dashboard:",
+        "category": "Dashboard",
         "roles": ["Viewer", "Contributor", "Admin"],
     },
+    # Analysis
+    "RR Analysis": {
+        "filename": "_04_pages/_02_ANALYSIS/ui_rr_analysis.py",
+        "icon": ":material/query_stats:",
+        "category": "Analysis",
+        "roles": ["Viewer", "Contributor", "Admin"],
+    },
+    # Monitoring
     "Weekly CQMS Monitor": {
-        "filename": "_04_pages/ui_201_weekly_cqms_monitor.py",
+        "filename": "_04_pages/_03_MONITORING/ui_weekly_cqms_monitor.py",
         "icon": ":material/autorenew:",
-        "category": "Workplace",
+        "category": "Monitoring",
         "roles": ["Viewer", "Contributor", "Admin"],
     },
     "Ongoing Status Tracker": {
-        "filename": "_04_pages/ui_202_ongoing_status_tracker.py",
+        "filename": "_04_pages/_03_MONITORING/ui_ongoing_status_tracker.py",
         "icon": ":material/autorenew:",
-        "category": "Workplace",
+        "category": "Monitoring",
         "roles": ["Viewer", "Contributor", "Admin"],
     },
-    "OE Quality Issue Dashboard": {
-        "filename": "_04_pages/ui_301_oe_quality_issue_dashboard.py",
-        "icon": ":material/dashboard:",
-        "category": "Detail",
-        "roles": ["Viewer", "Contributor", "Admin"],
-    },
-    "RR Analysis": {
-        "filename": "_04_pages/ui_401_rr_analysis.py",
-        "icon": ":material/query_stats:",
-        "category": "Support",
-        "roles": ["Viewer", "Contributor", "Admin"],
-    },
+    # Collaboration
     "FM Monitoring": {
-        "filename": "_04_pages/ui_402_fm_monitoring.py",
+        "filename": "_04_pages/_04_COLLABORATION/ui_fm_monitoring.py",
         "icon": ":material/query_stats:",
-        "category": "Support",
+        "category": "Collaboration",
         "roles": ["Viewer", "Contributor", "Admin"],
     },
-    "Manual Aggregator": {
-        "filename": "_04_pages/ui_901_manual_aggregator.py",
-        "icon": ":material/query_stats:",
-        "category": "Setting",
+    # User Guide
+    "Plotly Guide": {
+        "filename": "_04_pages/_05_USER_GUIDE/plotly_guide.py",
+        "icon": ":material/bar_chart:",
+        "category": "User Guide",
         "roles": ["Admin"],
     },
-        "Login History Access": {
-        "filename": "_04_pages/ui_902_assess_log_temp.py",
+    # Workplace
+    "OE Assessment Target": {
+        "filename": "_04_pages/_06_WORKPLACE/ui_oeassessment_target_manage.py",
+        "icon": ":material/settings:",
+        "category": "Workplace",
+        "roles": ["Admin"],
+    },
+    # Settings
+    "Manual Aggregator": {
+        "filename": "_04_pages/_07_SETTINGS/ui_manual_aggregator.py",
         "icon": ":material/query_stats:",
-        "category": "Setting",
+        "category": "Settings",
+        "roles": ["Admin"],
+    },
+    # Admin
+    "OE Assessment Result": {
+        "filename": "_04_pages/_08_ADMIN/ui_oeassessment_result_viewer.py",
+        "icon": ":material/assessment:",
+        "category": "Admin",
+        "roles": ["Admin"],
+    },
+    "Database Explorer": {
+        "filename": "_04_pages/_08_ADMIN/ui_db_explorer.py",
+        "icon": ":material/database:",
+        "category": "Admin",
         "roles": ["Admin"],
     },
     "TEST": {
-        "filename": "_04_pages/test.py",
+        "filename": "_04_pages/_08_ADMIN/test.py",
         "icon": ":material/query_stats:",
-        "category": "Setting",
+        "category": "Admin",
         "roles": ["Admin"],
     },
-        "Login History Access": {
-        "filename": "_04_pages/ui_902_assess_log_temp.py",
+    "Login History Access": {
+        "filename": "_04_pages/_08_ADMIN/ui_assess_log_temp.py",
         "icon": ":material/query_stats:",
-        "category": "Setting",
+        "category": "Admin",
         "roles": ["Admin"],
+    },
+    # System
+    "Navigation": {
+        "filename": "_04_pages/_09_SYSTEM/ui_navigation.py",
+        "icon": ":material/autorenew:",
+        "category": "System",
+        "roles": ["Viewer", "Contributor", "Admin"],
     },
 }

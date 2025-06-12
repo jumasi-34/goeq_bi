@@ -1,18 +1,37 @@
 """
 CQMS 웹 애플리케이션 메인 모듈
+
+이 모듈은 CQMS(Customer Quality Management System)의 메인 애플리케이션을 구현합니다.
+사용자 인증, 세션 관리, 페이지 라우팅 등의 핵심 기능을 제공합니다.
 """
 
 import sys
 import streamlit as st
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 import os
 import hashlib
 from typing import Dict, Optional
+from dotenv import load_dotenv
+import logging
+
+# 로깅 설정
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
+
+# 환경 변수 로드
+load_dotenv()
+
+# 상수 정의
+SESSION_TIMEOUT_MINUTES = int(os.getenv("SESSION_TIMEOUT_MINUTES", "30"))
+MAX_LOGIN_ATTEMPTS = int(os.getenv("MAX_LOGIN_ATTEMPTS", "3"))
+PASSWORD_MIN_LENGTH = 8
+ROLES = ["Viewer", "Contributor", "Admin"]
 
 os.environ["LD_LIBRARY_PATH"] = "/opt/oracle/instantclient_23_8"
-# 프로젝트 루트 추가
 sys.path.append(r"D:\OneDrive - HKNC\@ Project_CQMS\# Workstation_2")
 
 from _00_database.db_client import get_client
@@ -21,80 +40,158 @@ from _04_pages.config_pages import PAGE_CONFIGS
 from _05_commons.helper import SQLiteDML
 from _05_commons import config
 
-
 # 기본 설정
 st.set_page_config(layout="wide")
-ROLES = ["Viewer", "Contributor", "Admin"]
 DB_PATH = config.SQLITE_DB_PATH
-
-
-# 비밀번호 해싱 함수
-def hash_password(password: str) -> str:
-    return hashlib.sha256(password.encode()).hexdigest()
-
-
-# 환경 변수나 설정 파일에서 비밀번호를 가져오도록 수정 필요
-PASSWORDS = {"Contributor": hash_password("1"), "Admin": hash_password("2")}
-
 db_dml = SQLiteDML()
 
 
-# 캐시된 DB 호출 함수 정의
-@st.cache_data(ttl=3600)  # 캐시 시간을 1시간으로 증가
+def hash_password(password: str) -> str:
+    """비밀번호를 안전하게 해싱합니다.
+
+    Args:
+        password (str): 해싱할 비밀번호
+
+    Returns:
+        str: 솔트가 포함된 해시된 비밀번호
+    """
+    salt = os.urandom(32)
+    key = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, 100000)
+    return salt.hex() + key.hex()
+
+
+def verify_password(stored_password: str, provided_password: str) -> bool:
+    """저장된 비밀번호와 제공된 비밀번호를 검증합니다.
+
+    Args:
+        stored_password (str): 저장된 해시된 비밀번호
+        provided_password (str): 검증할 비밀번호
+
+    Returns:
+        bool: 비밀번호 일치 여부
+    """
+    try:
+        salt = bytes.fromhex(stored_password[:64])
+        stored_key = stored_password[64:]
+        key = hashlib.pbkdf2_hmac(
+            "sha256", provided_password.encode("utf-8"), salt, 100000
+        )
+        return key.hex() == stored_key
+    except Exception as e:
+        logger.error(f"Password verification failed: {str(e)}")
+        return False
+
+
+@st.cache_data(ttl=3600)
 def load_personnel_df():
+    """인사 데이터를 로드하고 전처리합니다.
+
+    Returns:
+        DataFrame: 전처리된 인사 데이터프레임
+    """
     try:
         df = get_client("snowflake").execute(CTE_HR_PERSONAL)
         df.columns = df.columns.str.upper()
         df["PNL_NO"] = df["PNL_NO"].astype(int)
         return df
     except Exception as e:
-        st.error(f"데이터베이스 연결 오류: {str(e)}")
+        logger.error(f"Database connection error: {str(e)}")
+        st.error("Failed to load personnel data. Please try again later.")
         return None
 
 
-# session_state 초기화
 def init_session_state():
+    """세션 상태를 초기화합니다."""
     defaults = {
         "role": None,
         "personel_id": None,
         "password_verified": False,
         "login_recorded": False,
+        "login_attempts": 0,
+        "last_activity": datetime.now(),
+        "is_locked": False,
     }
     for key, val in defaults.items():
         st.session_state.setdefault(key, val)
 
 
-# 호출 위치
-init_session_state()
+def check_session_timeout() -> bool:
+    """세션 타임아웃을 확인합니다.
+
+    Returns:
+        bool: 세션 만료 여부
+    """
+    if st.session_state.last_activity:
+        time_diff = datetime.now() - st.session_state.last_activity
+        if time_diff > timedelta(minutes=SESSION_TIMEOUT_MINUTES):
+            logout()
+            st.warning("Session expired. Please log in again.")
+            return True
+    return False
 
 
-# 로그인 함수
 def login():
+    """사용자 로그인을 처리합니다.
+
+    Returns:
+        None: 로그인 성공 시 세션 상태를 업데이트하고 페이지를 새로고침합니다.
+
+    Raises:
+        Exception: 로그인 처리 중 오류 발생 시 예외를 발생시킵니다.
+    """
     st.header("Log in")
+
+    # 계정 잠금 상태 확인
+    if st.session_state.is_locked:
+        st.error("Account is locked. Please contact administrator.")
+        return
+
+    # 역할 선택 및 인사번호 입력
     selected_role = st.selectbox("Choose your role", ROLES)
     personel_id_local = st.text_input("Personnel ID (8-digit number)", max_chars=8)
 
+    # 인사번호 유효성 검사
     if personel_id_local and not re.match(r"^\d{8}$", personel_id_local):
         st.warning("Please enter a valid 8-digit number.")
         return
 
+    # 비밀번호 입력 및 검증
     password = None
     is_pw_valid = True
 
-    if selected_role in PASSWORDS:
+    if selected_role in ["Contributor", "Admin"]:
         password = st.text_input("Enter your password", type="password")
-        is_pw_valid = password and hash_password(password) == PASSWORDS[selected_role]
+        if password and len(password) < PASSWORD_MIN_LENGTH:
+            st.warning(
+                f"Password must be at least {PASSWORD_MIN_LENGTH} characters long."
+            )
+            return
 
+    # 로그인 버튼 클릭 시 처리
     if st.button("Log in"):
+        # 입력값 검증
         if not personel_id_local or not is_pw_valid:
+            st.session_state.login_attempts += 1
+            if st.session_state.login_attempts >= MAX_LOGIN_ATTEMPTS:
+                st.session_state.is_locked = True
+                st.error("Account locked due to too many failed login attempts.")
+                return
             st.warning("Invalid login credentials.")
             return
 
         try:
-            st.session_state.role = selected_role
-            st.session_state.personel_id = int(personel_id_local)
-            st.session_state.password_verified = is_pw_valid
+            # 세션 상태 업데이트
+            st.session_state.update(
+                {
+                    "role": selected_role,
+                    "personel_id": int(personel_id_local),
+                    "password_verified": is_pw_valid,
+                    "last_activity": datetime.now(),
+                    "login_attempts": 0,
+                }
+            )
 
+            # 로그인 기록 저장
             if not st.session_state.login_recorded:
                 db_dml.execute_query(
                     "INSERT INTO logins (employee_id, login_time) VALUES (?, ?)",
@@ -104,49 +201,60 @@ def login():
                     ),
                 )
                 st.session_state.login_recorded = True
+                logger.info(f"User {personel_id_local} logged in successfully")
+
             st.rerun()
+
         except Exception as e:
-            st.error(f"로그인 처리 중 오류가 발생했습니다: {str(e)}")
+            logger.error(f"Login process error: {str(e)}")
+            st.error("An error occurred during login. Please try again.")
 
 
-# 로그아웃 함수
 def logout():
-    for key in ["role", "personel_id", "password_verified", "login_recorded"]:
-        st.session_state[key] = None
-    st.rerun()
+    """사용자 로그아웃을 처리합니다."""
+    try:
+        for key in ["role", "personel_id", "password_verified", "login_recorded"]:
+            st.session_state[key] = None
+        logger.info("User logged out successfully")
+        st.rerun()
+    except Exception as e:
+        logger.error(f"Logout process error: {str(e)}")
+        st.error("An error occurred during logout. Please try again.")
 
 
-# 본문 실행 로직
+# 메인 실행 로직
+init_session_state()
 st.logo(image="_06_assets/logo.png", icon_image="_06_assets/logo_only.png")
-role = st.session_state.role
-personel_id = st.session_state.personel_id
 
-# 로그인 성공 이후에만 실행
 if st.session_state.password_verified:
     df_personnel = load_personnel_df()
-    df_matched = df_personnel[df_personnel["PNL_NO"] == st.session_state.personel_id]
+    if df_personnel is not None:
+        df_matched = df_personnel[
+            df_personnel["PNL_NO"] == st.session_state.personel_id
+        ]
 
-    if df_matched.empty:
-        st.warning("No matching personnel ID record found.")
-        st.stop()
+        if df_matched.empty:
+            st.warning("No matching personnel ID record found.")
+            st.stop()
 
-    personel_nm = df_matched["PNL_NM"].values[0]
-    st.caption(
-        f":grey[Welcome,] **{personel_nm}**:grey[! You have access with] **{st.session_state.role}** :grey[privileges.]"
-    )
+        personel_nm = df_matched["PNL_NM"].values[0]
+        st.caption(
+            f":grey[Welcome,] **{personel_nm}**:grey[! You have access with] **{st.session_state.role}** :grey[privileges.]"
+        )
 
-    page_groups = {}
+        page_groups = {}
+        for title, page in PAGE_CONFIGS.items():
+            if st.session_state.role in page["roles"]:
+                CATEGORY = page["category"]
+                page = st.Page(page["filename"], title=title, icon=page["icon"])
+                page_groups.setdefault(CATEGORY, []).append(page)
 
-    for title, page in PAGE_CONFIGS.items():
-        if role in page["roles"]:
-            CATEGORY = page["category"]
-            page = st.Page(page["filename"], title=title, icon=page["icon"])
-            page_groups.setdefault(CATEGORY, []).append(page)
-
-    page_groups["Account"] = [
-        st.Page(logout, title="Log out", icon=":material/logout:")
-    ]
-    pg = st.navigation(page_groups)
+        page_groups["System"] = page_groups.get("System", []) + [
+            st.Page(logout, title="Log out", icon=":material/logout:")
+        ]
+        pg = st.navigation(page_groups)
+    else:
+        st.error("Failed to load user data. Please try again later.")
 else:
     pg = st.navigation([st.Page(login)])
 

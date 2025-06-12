@@ -8,7 +8,7 @@ from datetime import datetime as dt
 
 sys.path.append(r"D:\OneDrive - HKNC\@ Project_CQMS\# Workstation_2")
 
-from _03_visualization import bi_401_rr_analysis
+from _03_visualization._02_ANALYSIS import viz_rr_analysis
 from _02_preprocessing.GMES.df_rr import (
     get_processed_agg_rr_data,
     get_processed_raw_rr_data,
@@ -20,7 +20,7 @@ if config.DEV_MODE:
     import importlib
 
     importlib.reload(config)
-    importlib.reload(bi_401_rr_analysis)
+    importlib.reload(viz_rr_analysis)
 
 # st.set_page_config(layout="wide")
 
@@ -62,11 +62,11 @@ with tabs[0]:
     agg_rr_df = get_processed_agg_rr_data(start_date=start_date, end_date=end_date)
 
     with overview_col[0]:
-        fig = bi_401_rr_analysis.hbar_expected_pass_rate_by_plant(agg_rr_df)
+        fig = viz_rr_analysis.hbar_expected_pass_rate_by_plant(agg_rr_df)
         st.plotly_chart(fig, use_container_width=True)
 
     with overview_col[1]:
-        fig = bi_401_rr_analysis.histogram_expected_pass_rate_by_plant(agg_rr_df)
+        fig = viz_rr_analysis.histogram_expected_pass_rate_by_plant(agg_rr_df)
         st.plotly_chart(fig, use_container_width=True)
 
     st.subheader("Specification-Level Aggregation")
@@ -89,9 +89,7 @@ with tabs[0]:
     agg_col = st.columns(2)
 
     with agg_col[0]:
-        fig = bi_401_rr_analysis.scatter_expected_pass_rate_by_project(
-            filtered_agg_rr_df
-        )
+        fig = viz_rr_analysis.scatter_expected_pass_rate_by_project(filtered_agg_rr_df)
         st.plotly_chart(fig, use_container_width=True)
 
     with agg_col[1]:
@@ -150,15 +148,15 @@ with tabs[1]:
             df_raw_rr = get_processed_raw_rr_data(
                 start_date=start_date, end_date=end_date, mcode=input_mcode
             )
-            fig = bi_401_rr_analysis.scatter_rr_trend_individual(df_raw_rr)
+            fig = viz_rr_analysis.scatter_rr_trend_individual(df_raw_rr)
             st.plotly_chart(fig)
 
             additional_plot_col = st.columns(2, gap="large")
             with additional_plot_col[0]:
-                fig = bi_401_rr_analysis.box_rr_individual(df_raw_rr)
+                fig = viz_rr_analysis.box_rr_individual(df_raw_rr)
                 st.plotly_chart(fig)
             with additional_plot_col[1]:
-                fig = bi_401_rr_analysis.pdf_rr_individual(df_raw_rr)
+                fig = viz_rr_analysis.pdf_rr_individual(df_raw_rr)
                 st.plotly_chart(fig)
 
             st.subheader("Raw Data")
