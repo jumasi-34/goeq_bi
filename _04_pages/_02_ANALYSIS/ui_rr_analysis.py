@@ -35,7 +35,7 @@ end_date = config.today
 # 즉, form 제출 후에도 현재 탭이나 이전 값들이 유지되도록 함
 
 if "active_tab" not in st.session_state:
-    st.session_state.active_tab = "Tab 1"
+    st.session_state.active_tab = "Plant-level Overview"
 
 
 if "current_tab" not in st.session_state:

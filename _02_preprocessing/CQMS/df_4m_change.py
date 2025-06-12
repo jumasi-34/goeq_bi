@@ -40,8 +40,8 @@ def load_4m() -> pd.DataFrame:
         df = helper_pandas.standardize_columns_uppercase(df).pipe(
             helper_pandas.convert_date_columns, ["REG_DATE", "COMP_DATE"]
         )
-        df["DOC_NO"] = df["DOC_NO"].str.replace("MANA-DOC-", "4M-", regex=False)
         df["URL"] = config_pandas.URL_CHANGE_4M + df["DOC_NO"]
+        df["DOC_NO"] = df["DOC_NO"].str.replace("MANA-DOC-", "4M-", regex=False)
         return df
     except Exception as e:
         st.error(f"4M 데이터 로드 중 오류 발생: {str(e)}")

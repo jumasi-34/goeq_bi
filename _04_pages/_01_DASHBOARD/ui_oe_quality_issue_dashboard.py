@@ -118,21 +118,21 @@ def render_global_tab(data, selected_year):
 
     # 4. MTTC Index 섹션
     mttc_help = """
-        **MTTC (Mean Time To Closure)** represents the average number of business days it takes to close a quality issue.
+MTTC (Mean Time To Closure) represents the average number of business days it takes to close a quality issue.
 
-        This metric is calculated by summing up several work phases, including:
-        - **Occurrence to Registration**
-        - **Registration to Return** (only if the issue is returned)
-        - **Return or Registration to Countermeasure**
-        - **Countermeasure to 8D Completion**
+This metric is calculated by summing up several work phases, including:
+- Occurrence to Registration
+- Registration to Return (only if the issue is returned)
+- Return or Registration to Countermeasure
+- Countermeasure to 8D Completion
 
-        The system uses **business days** (excluding weekends) based on actual dates provided in the report.
+The system uses business days (excluding weekends) based on actual dates provided in the report.
 
-        If certain dates (e.g., completion) are missing, the calculation assumes **today's date** as the endpoint.  
-        This ensures ongoing issues are also reflected in the MTTC calculation.
+If certain dates (e.g., completion) are missing, the calculation assumes today's date as the endpoint.
+This ensures ongoing issues are also reflected in the MTTC calculation.
 
-        A lower MTTC indicates faster resolution and better responsiveness to quality issues.
-            """
+A lower MTTC indicates faster resolution and better responsiveness to quality issues.
+"""
     st.subheader("MTTC Index", help=mttc_help)
 
     # 4.1 MTTC 데이터 준비
@@ -169,6 +169,85 @@ def render_global_tab(data, selected_year):
     cols[3].plotly_chart(
         viz.draw_mttc_8d_global_indicator(df_mttc), use_container_width=True
     )
+
+
+# 공통 컬럼 설정 정의
+COMMON_COLUMN_CONFIG = {
+    # Basic Information
+    "OEQ GROUP": st.column_config.TextColumn("OEQ GROUP", help="OEQ GROUP"),
+    "PLANT": st.column_config.TextColumn("Plant", help="Plant code"),
+    "OEM": st.column_config.TextColumn("OEM", help="OEM"),
+    "VEH": st.column_config.TextColumn("Vehicle", help="Vehicle model"),
+    "PJT": st.column_config.TextColumn("Project", help="Project code"),
+    # Date Information
+    "OCC_DATE": st.column_config.DateColumn(
+        "Occurrence Date", format="YYYY-MM-DD", help="Quality issue occurrence date"
+    ),
+    "REG_DATE": st.column_config.DateColumn(
+        "Registration Date", format="YYYY-MM-DD", help="Quality issue registration date"
+    ),
+    "RTN_DATE": st.column_config.DateColumn(
+        "Return Date", format="YYYY-MM-DD", help="Quality issue return date"
+    ),
+    "CTM_DATE": st.column_config.DateColumn(
+        "Countermeasure Date",
+        format="YYYY-MM-DD",
+        help="Countermeasure implementation date",
+    ),
+    "COMP_DATE": st.column_config.DateColumn(
+        "Completion Date", format="YYYY-MM-DD", help="8D report completion date"
+    ),
+    # Status Information
+    "STATUS": st.column_config.TextColumn(
+        "Status", help="Current quality issue status"
+    ),
+    # Classification Information
+    "LOCATION": st.column_config.TextColumn("Location", help="Location"),
+    "MARKET": st.column_config.TextColumn("Market", help="Market"),
+    "M_CODE": st.column_config.TextColumn("M Code", help="M Code"),
+    "PNL_NM": st.column_config.TextColumn("Personnel Name", help="Panel Name"),
+    "TYPE": st.column_config.TextColumn("Type", help="Type"),
+    "CAT": st.column_config.TextColumn("Category", help="Category"),
+    "SUB_CAT": st.column_config.TextColumn("Sub Category", help="Sub Category"),
+    # Period Information
+    "REG_PRD": st.column_config.NumberColumn(
+        "Registration Period", help="Registration period in days", format="%.0f"
+    ),
+    "RTN_PRD": st.column_config.NumberColumn(
+        "Return Period", help="Return period in days", format="%.0f"
+    ),
+    "CTM_PRD": st.column_config.NumberColumn(
+        "Countermeasure Period", help="Countermeasure period in days", format="%.0f"
+    ),
+    "COMP_PRD": st.column_config.NumberColumn(
+        "Completion Period", help="8D report completion period in days", format="%.0f"
+    ),
+    "MTTC": st.column_config.NumberColumn(
+        "MTTC", help="Total period in days", format="%.0f"
+    ),
+    # Other Information
+    "URL": st.column_config.LinkColumn(
+        "Link", help="Link to quality issue detail page", display_text="Link"
+    ),
+}
+
+# 공통 컬럼 그룹 정의
+COMMON_COLUMNS = {
+    "Basic Info": ["OEQ GROUP", "PLANT", "OEM", "VEH", "PJT"],
+    "Dates": ["OCC_DATE", "REG_DATE", "RTN_DATE", "CTM_DATE", "COMP_DATE"],
+    "Status": ["STATUS"],
+    "Classification": [
+        "LOCATION",
+        "MARKET",
+        "M_CODE",
+        "PNL_NM",
+        "TYPE",
+        "CAT",
+        "SUB_CAT",
+    ],
+    "Periods": ["REG_PRD", "RTN_PRD", "CTM_PRD", "COMP_PRD", "MTTC"],
+    "Others": ["URL"],
+}
 
 
 def render_plant_tab(data, selected_year):
@@ -291,7 +370,20 @@ def render_plant_tab(data, selected_year):
         (data["raw_3_years"]["YYYY"] == int(selected_year))
         & (data["raw_3_years"]["PLANT"] == selected_plt)
     ]
-    st.dataframe(df_plt_issues, use_container_width=True)
+
+    # 컬럼 정의
+    columns = COMMON_COLUMNS.copy()
+
+    # 모든 컬럼을 하나의 리스트로 병합
+    remain_col = [col for cols in columns.values() for col in cols]
+    df_plt_issues = df_plt_issues[remain_col]
+    df_plt_issues = df_plt_issues.sort_values(by="REG_DATE", ascending=False)
+
+    st.dataframe(
+        df_plt_issues,
+        use_container_width=True,
+        column_config=COMMON_COLUMN_CONFIG,
+    )
 
 
 def render_oeqg_tab(data, selected_year):
@@ -374,91 +466,10 @@ def render_rawdata_tab(data, selected_year):
     st.write("Hover over columns to see detailed descriptions.")
 
     # 컬럼 정의
-    columns = {
-        "Basic Info": ["OEQ GROUP", "PLANT", "OEM", "VEH", "PJT"],
-        "Responsible": ["OWNER_ID", "RESP_ID"],
-        "Dates": ["OCC_DATE", "REG_DATE", "RTN_DATE", "CTM_DATE", "COMP_DATE"],
-        "Status": ["RETURN_YN", "HK_FAULT_YN", "STATUS"],
-        "Classification": [
-            "LOCATION",
-            "KPI",
-            "MARKET",
-            "M_CODE",
-            "PNL_NM",
-            "TYPE",
-            "CAT",
-            "SUB_CAT",
-        ],
-        "Periods": ["REG_PRD", "RTN_PRD", "CTM_PRD", "COMP_PRD", "MTTC"],
-        "Others": ["URL", "YYYY", "MM"],
-    }
+    columns = COMMON_COLUMNS.copy()
 
     # 모든 컬럼을 하나의 리스트로 병합
     remain_col = [col for cols in columns.values() for col in cols]
-
-    # 컬럼 설정 정의
-    column_config = {
-        # Basic Information
-        "PLANT": st.column_config.TextColumn("Plant", help="Plant code"),
-        "OEM": st.column_config.TextColumn("OEM", help="Automotive manufacturer"),
-        "VEH": st.column_config.TextColumn("Vehicle", help="Vehicle model"),
-        "PJT": st.column_config.TextColumn("Project", help="Project code"),
-        # Responsible Information
-        "OWNER_ID": st.column_config.TextColumn("Owner", help="Quality issue owner"),
-        "RESP_ID": st.column_config.TextColumn(
-            "Responsible", help="Quality issue responsible person"
-        ),
-        # Date Information
-        "OCC_DATE": st.column_config.DateColumn(
-            "Occurrence Date", format="YYYY-MM-DD", help="Quality issue occurrence date"
-        ),
-        "REG_DATE": st.column_config.DateColumn(
-            "Registration Date",
-            format="YYYY-MM-DD",
-            help="Quality issue registration date",
-        ),
-        "RTN_DATE": st.column_config.DateColumn(
-            "Return Date", format="YYYY-MM-DD", help="Quality issue return date"
-        ),
-        "CTM_DATE": st.column_config.DateColumn(
-            "Countermeasure Date",
-            format="YYYY-MM-DD",
-            help="Countermeasure implementation date",
-        ),
-        "COMP_DATE": st.column_config.DateColumn(
-            "Completion Date", format="YYYY-MM-DD", help="8D report completion date"
-        ),
-        # Status Information
-        "STATUS": st.column_config.TextColumn(
-            "Status", help="Current quality issue status"
-        ),
-        "RETURN_YN": st.column_config.TextColumn(
-            "Return Status", help="Quality issue return status"
-        ),
-        "HK_FAULT_YN": st.column_config.TextColumn("HK Fault", help="HK fault status"),
-        # Period Information
-        "REG_PRD": st.column_config.NumberColumn(
-            "Registration Period", help="Registration period in days", format="%.0f"
-        ),
-        "RTN_PRD": st.column_config.NumberColumn(
-            "Return Period", help="Return period in days", format="%.0f"
-        ),
-        "CTM_PRD": st.column_config.NumberColumn(
-            "Countermeasure Period", help="Countermeasure period in days", format="%.0f"
-        ),
-        "COMP_PRD": st.column_config.NumberColumn(
-            "Completion Period",
-            help="8D report completion period in days",
-            format="%.0f",
-        ),
-        "MTTC": st.column_config.NumberColumn(
-            "Total Period", help="Total period in days", format="%.0f"
-        ),
-        # Other Information
-        "URL": st.column_config.LinkColumn(
-            "Link", help="Link to quality issue detail page", display_text="Link"
-        ),
-    }
 
     # 데이터프레임 표시
     filtered_data = data["raw_3_years"][data["raw_3_years"]["YYYY"] == selected_year][
@@ -467,8 +478,7 @@ def render_rawdata_tab(data, selected_year):
     st.dataframe(
         filtered_data,
         use_container_width=True,
-        hide_index=True,
-        column_config=column_config,
+        column_config=COMMON_COLUMN_CONFIG,
     )
 
 

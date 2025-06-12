@@ -11,7 +11,6 @@ import re
 from datetime import datetime, timedelta
 from pathlib import Path
 import os
-import hashlib
 from typing import Dict, Optional
 from dotenv import load_dotenv
 import logging
@@ -28,8 +27,10 @@ load_dotenv()
 # 상수 정의
 SESSION_TIMEOUT_MINUTES = int(os.getenv("SESSION_TIMEOUT_MINUTES", "30"))
 MAX_LOGIN_ATTEMPTS = int(os.getenv("MAX_LOGIN_ATTEMPTS", "3"))
-PASSWORD_MIN_LENGTH = 8
 ROLES = ["Viewer", "Contributor", "Admin"]
+
+# 고정 비밀번호 설정
+FIXED_PASSWORDS = {"Contributor": "January", "Admin": "December"}
 
 os.environ["LD_LIBRARY_PATH"] = "/opt/oracle/instantclient_23_8"
 sys.path.append(r"D:\OneDrive - HKNC\@ Project_CQMS\# Workstation_2")
@@ -46,40 +47,17 @@ DB_PATH = config.SQLITE_DB_PATH
 db_dml = SQLiteDML()
 
 
-def hash_password(password: str) -> str:
-    """비밀번호를 안전하게 해싱합니다.
+def verify_password(role: str, provided_password: str) -> bool:
+    """비밀번호를 검증합니다.
 
     Args:
-        password (str): 해싱할 비밀번호
-
-    Returns:
-        str: 솔트가 포함된 해시된 비밀번호
-    """
-    salt = os.urandom(32)
-    key = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, 100000)
-    return salt.hex() + key.hex()
-
-
-def verify_password(stored_password: str, provided_password: str) -> bool:
-    """저장된 비밀번호와 제공된 비밀번호를 검증합니다.
-
-    Args:
-        stored_password (str): 저장된 해시된 비밀번호
+        role (str): 사용자 역할
         provided_password (str): 검증할 비밀번호
 
     Returns:
         bool: 비밀번호 일치 여부
     """
-    try:
-        salt = bytes.fromhex(stored_password[:64])
-        stored_key = stored_password[64:]
-        key = hashlib.pbkdf2_hmac(
-            "sha256", provided_password.encode("utf-8"), salt, 100000
-        )
-        return key.hex() == stored_key
-    except Exception as e:
-        logger.error(f"Password verification failed: {str(e)}")
-        return False
+    return FIXED_PASSWORDS.get(role) == provided_password
 
 
 @st.cache_data(ttl=3600)
@@ -161,11 +139,8 @@ def login():
 
     if selected_role in ["Contributor", "Admin"]:
         password = st.text_input("Enter your password", type="password")
-        if password and len(password) < PASSWORD_MIN_LENGTH:
-            st.warning(
-                f"Password must be at least {PASSWORD_MIN_LENGTH} characters long."
-            )
-            return
+        if password:
+            is_pw_valid = verify_password(selected_role, password)
 
     # 로그인 버튼 클릭 시 처리
     if st.button("Log in"):
@@ -248,6 +223,16 @@ if st.session_state.password_verified:
                 CATEGORY = page["category"]
                 page = st.Page(page["filename"], title=title, icon=page["icon"])
                 page_groups.setdefault(CATEGORY, []).append(page)
+
+        # User Guide와 Workplace 사이에 구분선 추가
+        if "User Guide" in page_groups and "Workplace" in page_groups:
+            page_groups["User Guide"].append(
+                st.Page(
+                    lambda: st.divider(),
+                    title="------------------------------------------------",
+                    icon="",
+                )
+            )
 
         page_groups["System"] = page_groups.get("System", []) + [
             st.Page(logout, title="Log out", icon=":material/logout:")

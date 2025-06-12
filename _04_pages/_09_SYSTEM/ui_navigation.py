@@ -18,28 +18,64 @@ sqlite_db = SQLiteDML()
 # 🔸 페이지 분류별 구성 정의
 # ------------------------
 
-# ?페이지를 추가할 경우 'PAGE_CONFIGS'에 등록된 Page의 key값을 추가하면됨!
-
-NAVIGATION_SECTIONS = {
-    "Summary": [],
-    "Workplace": ["Weekly CQMS Monitor", "Ongoing Status Tracker"],
-    "Detail Page": ["OE Quality Issue Dashboard"],
-    "Support": ["RR Analysis", "FM Monitoring"],
+# 카테고리 그룹 정의
+CATEGORY_GROUPS = {
+    "Main": ["Dashboard", "Analysis", "Monitoring", "Collaboration", "User Guide"],
+    "Management": ["Workplace", "Settings", "Admin", "System"],
 }
+
+
+# 사용자 권한에 따라 페이지 필터링
+def get_authorized_pages():
+    user_role = st.session_state.get("role")
+    if not user_role:
+        return {}
+
+    authorized_pages = {}
+    for page_title, page_config in PAGE_CONFIGS.items():
+        if user_role in page_config["roles"]:
+            category = page_config["category"]
+            if category not in authorized_pages:
+                authorized_pages[category] = []
+            authorized_pages[category].append(page_title)
+
+    return authorized_pages
+
 
 # ------------------------
 # 🔸 첫 번째 컨테이너 (Navigation)
 # ------------------------
 with st.container(border=True):
-    cols = st.columns(len(NAVIGATION_SECTIONS))
+    authorized_pages = get_authorized_pages()
 
-    for i, (section, page_titles) in enumerate(NAVIGATION_SECTIONS.items()):
-        with cols[i]:
-            st.subheader(section)
-            st.write("")
-            for title in page_titles:
-                cfg = PAGE_CONFIGS[title]
-                st.page_link(cfg["filename"], label=title, icon=cfg["icon"])
+    if not authorized_pages:
+        st.warning("로그인이 필요합니다.")
+    else:
+        # Main 섹션
+        st.subheader("Main")
+        main_cols = st.columns(len(CATEGORY_GROUPS["Main"]))
+
+        for i, category in enumerate(CATEGORY_GROUPS["Main"]):
+            if category in authorized_pages:
+                with main_cols[i]:
+                    st.write(f"**{category}**")
+                    for title in authorized_pages[category]:
+                        cfg = PAGE_CONFIGS[title]
+                        st.page_link(cfg["filename"], label=title, icon=cfg["icon"])
+
+        st.divider()
+
+        # Management 섹션
+        st.subheader("Management")
+        mgmt_cols = st.columns(len(CATEGORY_GROUPS["Management"]))
+
+        for i, category in enumerate(CATEGORY_GROUPS["Management"]):
+            if category in authorized_pages:
+                with mgmt_cols[i]:
+                    st.write(f"**{category}**")
+                    for title in authorized_pages[category]:
+                        cfg = PAGE_CONFIGS[title]
+                        st.page_link(cfg["filename"], label=title, icon=cfg["icon"])
 
 # ------------------------
 # 🔸 두 번째 컨테이너 (문서)
