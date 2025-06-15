@@ -141,37 +141,53 @@ def save_df_to_sqlite(
         return False
 
 
-def generate_sellin_monthly_agg() -> bool:
+def generate_sellin_monthly_agg() -> tuple[bool, str]:
     """
     Oracle DB에서 HOPE SELLIN 데이터를 가져와 월별 집계 후 SQLite DB에 저장
 
     Returns:
-        bool: 처리 성공 여부
+        tuple[bool, str]: (처리 성공 여부, 결과 메시지)
     """
     try:
         logger.info("HOPE SELLIN 데이터 집계 시작")
 
         # Oracle DB에서 데이터 조회
-        df = get_client("oracle_bi").execute(query_hope_sellin)
-        logger.info(f"Oracle DB에서 {len(df)}건의 데이터 조회 완료")
+        try:
+            df = get_client("oracle_bi").execute(query_hope_sellin)
+            if df is None or df.empty:
+                return False, "Oracle DB에서 데이터를 가져오지 못했습니다."
+            logger.info(f"Oracle DB에서 {len(df)}건의 데이터 조회 완료")
+        except Exception as e:
+            error_msg = f"Oracle DB 연결 또는 쿼리 실행 중 오류 발생: {str(e)}"
+            logger.error(error_msg)
+            return False, error_msg
+
+        # 컬럼명 명시적 지정
+        df.columns = ["RE/OE", "M_CODE", "YYYY", "MM", "SUPP_QTY"]
+
+        print("데이터프레임 컬럼:", df.columns.tolist())
+        print("데이터프레임 샘플:\n", df.head())
 
         # SQLite DB에 저장
         if save_df_to_sqlite(df, "sellin_monthly_agg"):
-            logger.info("HOPE SELLIN 데이터 집계 완료")
-            return True
-        return False
+            success_msg = "HOPE SELLIN 데이터 집계 완료"
+            logger.info(success_msg)
+            return True, success_msg
+        return False, "SQLite DB 저장 중 오류가 발생했습니다."
 
     except Exception as e:
-        logger.error(f"HOPE SELLIN 데이터 집계 중 오류 발생: {str(e)}")
-        return False
+        error_msg = f"HOPE SELLIN 데이터 집계 중 오류 발생: {str(e)}"
+        logger.error(error_msg)
+        return False, error_msg
 
 
 def main():
     try:
-        if generate_sellin_monthly_agg():
-            logger.info("프로그램 정상 종료")
+        success, message = generate_sellin_monthly_agg()
+        if success:
+            logger.info(message)
         else:
-            logger.error("프로그램 비정상 종료")
+            logger.error(message)
     except Exception as e:
         logger.error(f"프로그램 실행 중 예기치 않은 오류 발생: {str(e)}")
 
