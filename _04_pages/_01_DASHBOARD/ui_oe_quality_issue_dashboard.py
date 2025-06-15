@@ -103,6 +103,13 @@ def render_global_tab(data, selected_year):
     cols[1].plotly_chart(viz.draw_supply_quantity_by_plant(data["plant_yearly"]))
     cols[2].plotly_chart(viz.draw_issue_count_by_plant(data["plant_yearly"]))
     cols[3].plotly_chart(viz.draw_oeqi_by_plant(data["plant_yearly"]))
+    with st.expander("SKU Ratio by Plant", expanded=False):
+        cols = st.columns(3)
+        cols[0].plotly_chart(viz.draw_sku_ratio_by_plant(data["oe_sku"]))
+        cols[1].plotly_chart(
+            viz.draw_supply_quantity_ratio_by_plant(data["plant_yearly"])
+        )
+        cols[2].plotly_chart(viz.draw_issue_count_ratio_by_plant(data["plant_yearly"]))
 
     # 3. 이슈 타입 분류 섹션
     st.subheader("Categorize quality issues by type")

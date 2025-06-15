@@ -204,13 +204,20 @@ def draw_pie_issue_count_by_oem(df, selected_year):
         textinfo="label + percent",
         marker=dict(colors=color_ls),
         textfont_size=10,
+        textposition="inside",
         hole=0.3,
         sort=False,
         direction="clockwise",
         hovertemplate="""<b>OEM</b>: %{label}<br><b>Count</b>: %{value}<br><b>Possesion</b>: %{percent:.1%}<extra></extra>""",
     )
     layout = go.Layout(
-        height=300, title_text="Quality Issue rate by OEM", showlegend=False
+        height=300,
+        title_text="Quality Issue rate by OEM",
+        showlegend=False,
+        margin=dict(l=20, r=20, t=50, b=40),
+        font=dict(size=10),
+        uniformtext_minsize=10,
+        uniformtext_mode="hide",
     )
     fig = go.Figure(trace, layout)
     return fig
@@ -237,13 +244,20 @@ def draw_pie_issue_count_by_market(df, selected_year):
         textinfo="label + percent",
         marker=dict(colors=color_ls),
         textfont_size=10,
+        textposition="inside",
         hole=0.3,
         sort=False,
         direction="clockwise",
         hovertemplate="""<b>Market</b>: %{label}<br><b>Count</b>: %{value}<br><b>Possesion</b>: %{percent:.1%}<extra></extra>""",
     )
     layout = go.Layout(
-        height=300, title_text="Quality Issue rate by Region", showlegend=False
+        height=300,
+        title_text="Quality Issue rate by Region",
+        showlegend=False,
+        margin=dict(l=20, r=20, t=50, b=40),
+        font=dict(size=10),
+        uniformtext_minsize=10,
+        uniformtext_mode="hide",
     )
     fig = go.Figure(trace, layout)
     return fig
@@ -259,14 +273,19 @@ def draw_sku_by_plant(df):
         text=df["m_code"],
         marker=dict(color=config_plotly.GRAY_CLR),
         texttemplate="%{text:.0f}",
+        textposition="outside",
+        textangle=0,
+        textfont=dict(size=14),
         orientation="h",
         hovertemplate="<b>Plant:</b> %{y}<br><b>SKU:</b> %{x:,} EA<extra></extra>",
     )
     layout = go.Layout(
         height=350,
         title_text="OE SKU",
-        xaxis_title="SKU",
-        xaxis=dict(showticklabels=False, showgrid=True),
+        xaxis_title="SKU [ N of Projects]",
+        xaxis=dict(
+            showticklabels=False, showgrid=True, range=[0, df["m_code"].max() * 1.2]
+        ),
         yaxis=dict(categoryorder="total ascending"),
     )
     fig = go.Figure(trace, layout)
@@ -274,71 +293,226 @@ def draw_sku_by_plant(df):
 
 
 def draw_supply_quantity_by_plant(df):
-    fig = go.Figure()
-    fig.add_trace(
-        go.Bar(
-            x=df["SUPP_QTY"],
-            y=df["PLANT"],
-            text=df["SUPP_QTY"],
-            marker=dict(color=config_plotly.GRAY_CLR),
-            texttemplate="%{text:.2s}",
-            orientation="h",
-            hovertemplate="<b>Plant:</b> %{y}<br><b>Supply:</b> %{x:,} EA<extra></extra>",
-        )
+    """공장별 OE 공급 수량을 시각화하는 함수
+
+    Args:
+        df (pd.DataFrame): 공장별 공급 수량 데이터
+
+    Returns:
+        go.Figure: 공장별 공급 수량 바 차트
+    """
+    trace = go.Bar(
+        x=df["SUPP_QTY"],
+        y=df["PLANT"],
+        textposition="outside",
+        textangle=0,
+        textfont=dict(size=14),
+        text=df["SUPP_QTY"],
+        marker=dict(color=config_plotly.GRAY_CLR),
+        texttemplate="%{text:.2s}",
+        orientation="h",
+        hovertemplate="<b>Plant:</b> %{y}<br><b>Supply:</b> %{x:,} EA<extra></extra>",
     )
-    fig.update_layout(
+    layout = go.Layout(
         height=350,
         title_text="OE Supplies",
         xaxis_title="Quantity of supply [ EA ]",
-        xaxis=dict(showticklabels=False, showgrid=True),
+        xaxis=dict(
+            showticklabels=False, showgrid=True, range=[0, df["SUPP_QTY"].max() * 1.2]
+        ),
         yaxis=dict(categoryorder="total ascending"),
     )
+    fig = go.Figure(trace, layout)
     return fig
 
 
 def draw_issue_count_by_plant(df):
-    fig = go.Figure()
-    fig.add_trace(
-        go.Bar(
-            x=df["count"],
-            y=df["PLANT"],
-            text=df["count"],
-            marker=dict(color=config_plotly.GRAY_CLR),
-            texttemplate="%{text:.0f}",
-            orientation="h",
-            hovertemplate="<b>Plant:</b> %{y}<br><b>Issue Count:</b> %{x:,} <extra></extra>",
-        )
+    """공장별 품질 이슈 건수를 시각화하는 함수
+
+    Args:
+        df (pd.DataFrame): 공장별 품질 이슈 건수 데이터
+
+    Returns:
+        go.Figure: 공장별 품질 이슈 건수 바 차트
+    """
+    trace = go.Bar(
+        x=df["count"],
+        y=df["PLANT"],
+        text=df["count"],
+        marker=dict(color=config_plotly.GRAY_CLR),
+        texttemplate="%{text:.0f}",
+        textposition="outside",
+        textangle=0,
+        textfont=dict(size=14),
+        orientation="h",
+        hovertemplate="<b>Plant:</b> %{y}<br><b>Issue Count:</b> %{x:,} <extra></extra>",
     )
-    fig.update_layout(
+    layout = go.Layout(
         height=350,
         title_text="Quality Issue",
         xaxis_title="Quality Issues [ number of cases ]",
-        xaxis=dict(showticklabels=False, showgrid=True),
+        xaxis=dict(
+            showticklabels=False, showgrid=True, range=[0, df["count"].max() * 1.2]
+        ),
         yaxis=dict(categoryorder="total ascending"),
     )
+    fig = go.Figure(trace, layout)
     return fig
 
 
 def draw_oeqi_by_plant(df):
-    fig = go.Figure()
-    fig.add_trace(
-        go.Bar(
-            x=df["OEQI"],
-            y=df["PLANT"],
-            text=df["OEQI"],
-            marker=dict(color=config_plotly.GRAY_CLR),
-            texttemplate="%{text:.2f}",
-            orientation="h",
-            hovertemplate="<b>Plant:</b> %{y}<br><b>OEQI INDEX:</b> %{x:.2f} <extra></extra>",
-        )
+    """공장별 OE 품질 지수를 시각화하는 함수
+
+    Args:
+        df (pd.DataFrame): 공장별 OE 품질 지수 데이터
+
+    Returns:
+        go.Figure: 공장별 OE 품질 지수 바 차트
+    """
+    trace = go.Bar(
+        x=df["OEQI"],
+        y=df["PLANT"],
+        text=df["OEQI"],
+        marker=dict(color=config_plotly.GRAY_CLR),
+        texttemplate="%{text:.2f}",
+        textposition="outside",
+        textangle=0,
+        textfont=dict(size=14),
+        orientation="h",
+        hovertemplate="<b>Plant:</b> %{y}<br><b>OEQI INDEX:</b> %{x:.2f} <extra></extra>",
     )
-    fig.update_layout(
+    layout = go.Layout(
         height=350,
         title_text="OE Quality Index",
         xaxis_title="Quality Issues per million deliveries",
-        xaxis=dict(showticklabels=False, showgrid=True),
+        xaxis=dict(
+            showticklabels=False, showgrid=True, range=[0, df["OEQI"].max() * 1.2]
+        ),
         yaxis=dict(categoryorder="total ascending"),
     )
+    fig = go.Figure(trace, layout)
+    return fig
+
+
+def draw_sku_ratio_by_plant(df):
+    """공장별 SKU 비율을 파이 차트로 시각화하는 함수
+
+    Args:
+        df (pd.DataFrame): 공장별 SKU 데이터
+
+    Returns:
+        go.Figure: 공장별 SKU 비율 파이 차트
+    """
+    df["ratio"] = df["m_code"] / df["m_code"].sum()
+    df = df.sort_values("ratio", ascending=False)
+
+    # 파이 차트를 위한 색상 준비
+    color_ls = helper_plotly.get_transparent_colors(config_plotly.ORANGE_CLR, len(df))
+
+    # 커스텀 데이터 준비
+    customdata = df[["m_code"]].values
+
+    trace = go.Pie(
+        labels=df["plant"],
+        values=df["ratio"],
+        textinfo="label+percent",  # 라벨과 퍼센트를 파이 차트 내부에 표시
+        textposition="inside",  # 텍스트 위치를 내부로 설정
+        marker=dict(colors=color_ls),
+        textfont_size=12,  # 텍스트 크기를 12로 증가
+        hole=0.3,
+        sort=False,
+        direction="clockwise",
+        customdata=customdata,  # 커스텀 데이터 추가
+        hovertemplate="""<b>Plant</b>: %{label}<br><b>SKU Ratio</b>: %{percent:.1%}<br><b>SKU Count</b>: %{customdata[0]:,} EA<extra></extra>""",
+    )
+
+    layout = go.Layout(
+        height=350,
+        title_text="OE SKU Ratio by Plant",
+        showlegend=False,
+        margin=dict(l=40, r=40, t=80, b=40),  # 여백 최소화
+        font=dict(size=12),  # 전체 폰트 크기를 12로 통일
+        uniformtext_minsize=12,
+        uniformtext_mode="hide",
+    )
+
+    fig = go.Figure(trace, layout)
+    return fig
+
+
+def draw_supply_quantity_ratio_by_plant(df):
+    """공장별 공급 수량 비율을 파이 차트로 시각화하는 함수
+
+    Args:
+        df (pd.DataFrame): 공장별 공급 수량 데이터
+
+    Returns:
+        go.Figure: 공장별 공급 수량 비율 파이 차트
+    """
+    df["ratio"] = df["SUPP_QTY"] / df["SUPP_QTY"].sum()
+    df = df.sort_values("ratio", ascending=False)
+
+    # 파이 차트를 위한 색상 준비
+    color_ls = helper_plotly.get_transparent_colors(config_plotly.ORANGE_CLR, len(df))
+
+    # 커스텀 데이터 준비
+    customdata = df[["SUPP_QTY"]].values
+
+    trace = go.Pie(
+        labels=df["PLANT"],
+        values=df["ratio"],
+        textinfo="label+percent",
+        marker=dict(colors=color_ls),
+        textposition="inside",
+        textfont_size=12,
+        hole=0.3,
+        sort=False,
+        direction="clockwise",
+        customdata=customdata,
+        hovertemplate="""<b>Plant</b>: %{label}<br><b>Supply Quantity Ratio</b>: %{percent:.1%}<br><b>Supply Quantity</b>: %{customdata[0]:,} EA<extra></extra>""",
+    )
+    layout = go.Layout(
+        height=350,
+        title_text="OE Supply Quantity Ratio by Plant",
+        showlegend=False,
+        margin=dict(l=40, r=40, t=80, b=40),
+        font=dict(size=12),
+        uniformtext_minsize=12,
+        uniformtext_mode="hide",
+    )
+    fig = go.Figure(trace, layout)
+    return fig
+
+
+def draw_issue_count_ratio_by_plant(df):
+    """공장별 품질 이슈 건수 비율을 파이 차트로 시각화하는 함수"""
+    df["ratio"] = df["count"] / df["count"].sum()
+    df = df.sort_values("ratio", ascending=False)
+    color_ls = helper_plotly.get_transparent_colors(config_plotly.ORANGE_CLR, len(df))
+    customdata = df[["count"]].values
+    trace = go.Pie(
+        labels=df["PLANT"],
+        values=df["ratio"],
+        textinfo="label+percent",
+        marker=dict(colors=color_ls),
+        textposition="inside",
+        textfont_size=12,
+        hole=0.3,
+        sort=False,
+        direction="clockwise",
+        customdata=customdata,
+        hovertemplate="""<b>Plant</b>: %{label}<br><b>Issue Count Ratio</b>: %{percent:.1%}<br><b>Issue Count</b>: %{customdata[0]:,} EA<extra></extra>""",
+    )
+    layout = go.Layout(
+        height=350,
+        title_text="OE Issue Count Ratio by Plant",
+        showlegend=False,
+        margin=dict(l=40, r=40, t=80, b=40),
+        font=dict(size=12),
+        uniformtext_minsize=12,
+        uniformtext_mode="hide",
+    )
+    fig = go.Figure(trace, layout)
     return fig
 
 

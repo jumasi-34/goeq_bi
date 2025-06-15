@@ -114,16 +114,13 @@ else:
 help = """
 Global FM Metrics Overview:
 
-• Production Quantity: Total number of products manufactured
-
-• Non-conformance Quantity: Total number of defective products
-
-• Non-conformance Rate: Defect rate in PPM (Parts Per Million)
+• Production Quantity: Total number of products manufactured  
+• Non-conformance Quantity: Total number of defective products  
+• Non-conformance Rate: Defect rate in PPM (Parts Per Million)  
 
 Metrics Guide:
 
-• Production Qty: ↑ (Higher) / ↓ (Lower) vs PY (Previous Year)
-
+• Production Qty: ↑ (Higher) / ↓ (Lower) vs PY (Previous Year)  
 • NCF Metrics: Lower (Better) / Higher (Worse) vs Previous Year
 """
 metric_columns[0].subheader(
