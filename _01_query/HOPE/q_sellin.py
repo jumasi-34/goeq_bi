@@ -12,7 +12,8 @@ import sys
 import logging
 from typing import Optional
 
-sys.path.append(r"D:\OneDrive - HKNC\@ Project_CQMS\# Workstation_2")
+from _05_commons import config
+sys.path.append(config.PROJECT_ROOT)
 from _01_query.helper_sql import test_query_by_itself
 from _01_query.HOPE.q_hope import CTE_HOPE_OE_APP_UNIQUE, CTE_HOPE_OE_APP_ALL
 

@@ -7,7 +7,8 @@ import sys
 import datetime as dt
 import streamlit as st
 
-sys.path.append(r"D:\OneDrive - HKNC\@ Project_CQMS\# Workstation_2")
+from _05_commons import config
+sys.path.append(config.PROJECT_ROOT)
 
 from _05_commons import config
 from _02_preprocessing.CQMS import df_quality_issue, df_4m_change, df_customer_audit

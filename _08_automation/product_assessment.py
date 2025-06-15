@@ -13,7 +13,8 @@ Returns:
 
 import sys
 
-sys.path.append(r"D:\OneDrive - HKNC\@ Project_CQMS\# Workstation_2")
+from _05_commons import config
+sys.path.append(config.PROJECT_ROOT)
 
 import pandas as pd
 import numpy as np

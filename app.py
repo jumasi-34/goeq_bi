@@ -14,6 +14,7 @@ import os
 from typing import Dict, Optional
 from dotenv import load_dotenv
 import logging
+import cx_Oracle
 
 # 로깅 설정
 logging.basicConfig(
@@ -32,8 +33,18 @@ ROLES = ["Viewer", "Contributor", "Admin"]
 # 고정 비밀번호 설정
 FIXED_PASSWORDS = {"Contributor": "January", "Admin": "December"}
 
-os.environ["LD_LIBRARY_PATH"] = "/opt/oracle/instantclient_23_8"
-sys.path.append(r"D:\OneDrive - HKNC\@ Project_CQMS\# Workstation_2")
+# Oracle 클라이언트 설정
+os.environ["LD_LIBRARY_PATH"] = "/opt/oracle/instantclient"
+try:
+    cx_Oracle.init_oracle_client(lib_dir="/opt/oracle/instantclient")
+except cx_Oracle.ProgrammingError as e:
+    if "Oracle Client library has already been initialized" not in str(e):
+        raise
+    logger.info("Oracle Client library already initialized")
+
+from _05_commons import config
+
+sys.path.append(config.PROJECT_ROOT)
 
 from _00_database.db_client import get_client
 from _01_query.SAP.q_hk_personnel import CTE_HR_PERSONAL

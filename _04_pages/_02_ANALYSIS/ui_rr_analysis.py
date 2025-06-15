@@ -6,7 +6,8 @@ import sys
 import streamlit as st
 from datetime import datetime as dt
 
-sys.path.append(r"D:\OneDrive - HKNC\@ Project_CQMS\# Workstation_2")
+from _05_commons import config
+sys.path.append(config.PROJECT_ROOT)
 
 from _03_visualization._02_ANALYSIS import viz_rr_analysis
 from _02_preprocessing.GMES.df_rr import (

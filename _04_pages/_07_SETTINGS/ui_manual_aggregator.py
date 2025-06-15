@@ -9,7 +9,8 @@ import streamlit as st
 import os
 import pandas as pd
 
-sys.path.append(r"D:\OneDrive - HKNC\@ Project_CQMS\# Workstation_2")
+from _05_commons import config
+sys.path.append(config.PROJECT_ROOT)
 
 from _00_database import db_client
 from _01_query.HOPE.q_hope import oe_app

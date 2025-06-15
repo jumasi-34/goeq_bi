@@ -12,6 +12,7 @@
 1. 시스템 설정
    - SQLITE_DB_PATH: SQLite 데이터베이스 파일 경로
    - DEV_MODE: 개발 모드 활성화 여부
+   - PROJECT_ROOT: 프로젝트 루트 디렉토리 경로
 
 2. 날짜 관련 상수
    - today: 현재 날짜/시간
@@ -27,13 +28,13 @@
 
 사용 예시:
     from _05_commons import config
-    
+
     # DB 접근
     db_path = config.SQLITE_DB_PATH
-    
+
     # MTTC 계산
     mttc = calculate_mttc(config.today, config.a_week_ago)
-    
+
     # 공장 필터링
     filtered_plants = [p for p in config.plant_codes if p in config.plant_oeqg_dict]
 """
@@ -41,8 +42,10 @@
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List
+import os
 
 # 시스템 설정
+PROJECT_ROOT: str = os.path.abspath(os.path.join(os.path.dirname(__file__), "../"))
 SQLITE_DB_PATH: str = "../database/goeq_database.db"
 DEV_MODE: bool = True
 
@@ -59,7 +62,7 @@ plant_codes: List[str] = ["DP", "KP", "JP", "HP", "CP", "MP", "IP", "TP", "OT"]
 # OEQ 그룹 관련 상수
 plant_oeqg_dict: Dict[str, str] = {
     "KP": "G.OE Quality",
-    "DP": "G.OE Quality", 
+    "DP": "G.OE Quality",
     "IP": "G.OE Quality",
     "JP": "China OE Quality",
     "HP": "China OE Quality",
@@ -70,7 +73,7 @@ plant_oeqg_dict: Dict[str, str] = {
 
 oeqg_codes: List[str] = [
     "G.OE Quality",
-    "China OE Quality", 
+    "China OE Quality",
     "Europe OE Quality",
-    "NA OE Quality"
+    "NA OE Quality",
 ]

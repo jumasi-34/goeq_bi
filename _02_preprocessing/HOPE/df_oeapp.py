@@ -8,7 +8,8 @@ import numpy as np
 import pandas as pd
 
 
-sys.path.append(r"D:\OneDrive - HKNC\@ Project_CQMS\# Workstation_2")
+from _05_commons import config
+sys.path.append(config.PROJECT_ROOT)
 from _00_database.db_client import get_client
 from _01_query.GMES import q_production
 from _01_query.HOPE import q_hope

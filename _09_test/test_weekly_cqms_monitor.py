@@ -8,7 +8,8 @@ import pandas as pd
 import sys
 import os
 
-sys.path.append(r"D:\OneDrive - HKNC\@ Project_CQMS\# Workstation_2")
+from _05_commons import config
+sys.path.append(config.PROJECT_ROOT)
 
 from _04_pages._03_MONITORING.ui_weekly_cqms_monitor import (
     get_week_range,

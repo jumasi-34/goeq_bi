@@ -10,10 +10,11 @@ import streamlit as st
 from scipy.stats import norm
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+import os
 
+from _05_commons import config
 
-sys.path.append(r"D:\OneDrive - HKNC\@ Project_CQMS\# Workstation_2")
-
+sys.path.append(config.PROJECT_ROOT)
 
 from _02_preprocessing.CQMS.df_quality_issue import (
     aggregate_oeqi_by_plant_yearly,
@@ -24,7 +25,6 @@ from _02_preprocessing.CQMS.df_quality_issue import (
     aggregate_oeqi_by_goeq_yearly,
 )
 from _03_visualization import config_plotly, helper_plotly
-from _05_commons import config
 
 # 변수
 three_color_lst = [

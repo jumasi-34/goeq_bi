@@ -1,4 +1,3 @@
-
 # .gitignore
 # 캐시 및 컴파일 파일
 __pycache__/
@@ -14,3 +13,6 @@ _06_assets/
 *.jpg
 *.png
 goeq_database.db
+
+# 로그 파일
+logs/

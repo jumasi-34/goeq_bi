@@ -4,7 +4,8 @@ Streamlit 네비게이션 페이지
 
 import sys
 
-sys.path.append(r"D:\OneDrive - HKNC\@ Project_CQMS\# Workstation_2")
+from _05_commons import config
+sys.path.append(config.PROJECT_ROOT)
 
 import streamlit as st
 

@@ -10,7 +10,8 @@ CQMS 고객사 감사 쿼리 관리 모듈
 
 import sys
 
-sys.path.append(r"D:\OneDrive - HKNC\@ Project_CQMS\# Workstation_2")
+from _05_commons import config
+sys.path.append(config.PROJECT_ROOT)
 from _01_query.helper_sql import test_query_by_itself
 
 # --- 감사 유형/상태 코드 매핑 상수 정의 ---

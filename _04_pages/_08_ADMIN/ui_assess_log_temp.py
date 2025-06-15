@@ -5,7 +5,8 @@ import sys
 import pandas as pd
 import streamlit as st
 
-sys.path.append(r"D:\OneDrive - HKNC\@ Project_CQMS\# Workstation_2")
+from _05_commons import config
+sys.path.append(config.PROJECT_ROOT)
 
 from _00_database import db_client
 from _01_query.SAP.q_hk_personnel  import CTE_HR_PERSONAL

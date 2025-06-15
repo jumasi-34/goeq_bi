@@ -9,8 +9,14 @@ CQMS 4M 변경 쿼리 관리 모듈
 """
 
 import sys
+from datetime import datetime as dt
+import pandas as pd
+import numpy as np
+from typing import List, Optional
 
-sys.path.append(r"D:\OneDrive - HKNC\@ Project_CQMS\# Workstation_2")
+from _05_commons import config
+
+sys.path.append(config.PROJECT_ROOT)
 from _01_query.helper_sql import convert_dict_to_decode, test_query_by_itself
 
 # --- 목적/상태 코드 매핑 상수 정의 ---

@@ -18,7 +18,8 @@ import sys
 import streamlit as st
 import pandas as pd
 
-sys.path.append(r"D:\OneDrive - HKNC\@ Project_CQMS\# Workstation_2")
+from _05_commons import config
+sys.path.append(config.PROJECT_ROOT)
 
 from _02_preprocessing.GMES import df_ncf
 from _03_visualization._04_COLLABORATION import viz_fm_monitoring

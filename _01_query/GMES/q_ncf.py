@@ -20,7 +20,8 @@ GMES 부적합(NCF) 쿼리 관리 모듈
 import sys
 from typing import Optional, List, Union
 
-sys.path.append(r"D:\OneDrive - HKNC\@ Project_CQMS\# Workstation_2")
+from _05_commons import config
+sys.path.append(config.PROJECT_ROOT)
 from _01_query.helper_sql import test_query_by_itself
 
 # --- SQL 쿼리 템플릿 정의 ---

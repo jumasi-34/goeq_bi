@@ -27,7 +27,8 @@ DB 클라이언트를 사용하여 다양한 데이터베이스에서 쿼리를 
 
 import sys
 
-sys.path.append(r"D:\OneDrive - HKNC\@ Project_CQMS\# Workstation_2")  # noqa
+from _05_commons import config
+sys.path.append(config.PROJECT_ROOT)  # noqa
 
 from IPython.display import display
 import pandas as pd
