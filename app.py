@@ -34,9 +34,9 @@ ROLES = ["Viewer", "Contributor", "Admin"]
 FIXED_PASSWORDS = {"Contributor": "January", "Admin": "December"}
 
 # Oracle 클라이언트 설정
-os.environ["LD_LIBRARY_PATH"] = "/opt/oracle/instantclient"
+os.environ["LD_LIBRARY_PATH"] = "/opt/oracle/instantclient_21_18"
 try:
-    cx_Oracle.init_oracle_client(lib_dir="/opt/oracle/instantclient")
+    cx_Oracle.init_oracle_client(lib_dir="/opt/oracle/instantclient_21_18")
 except cx_Oracle.ProgrammingError as e:
     if "Oracle Client library has already been initialized" not in str(e):
         raise
