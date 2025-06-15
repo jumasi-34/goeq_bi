@@ -1,21 +1,32 @@
 """
-df_402_fm_monitoring.py
+FM(Final Manufacturing) 부적합 데이터 전처리 모듈
+
+이 모듈은 FM 관련 부적합 데이터를 처리하고 분석하기 위한 함수들을 제공합니다.
+주요 기능:
+- 공장별 연간 FM 부적합 수량 집계
+- 공장별 FM 부적합 PPM 계산
+- 공장별 월간 FM 부적합 PPM 추이 분석
+- 공장별 불량 유형별 FM 부적합 현황 분석
+
+작성자: [Your Name]
 """
 
 import sys
 from datetime import datetime, timedelta
 import numpy as np
 import pandas as pd
-
+import streamlit as st
+import time
 
 sys.path.append(r"D:\OneDrive - HKNC\@ Project_CQMS\# Workstation_2")
 from _00_database.db_client import get_client
 from _01_query.GMES import q_production, q_ncf
+from _02_preprocessing.GMES import df_production
 from _02_preprocessing import config_pandas
 from _05_commons import config
 from _02_preprocessing.helper_pandas import CountWorkingDays, test_dataframe_by_itself
 
-
+# FM 부적합 코드 리스트
 fm_ncf_list = [
     "FBC",
     "FCB",
@@ -55,134 +66,141 @@ fm_ncf_list = [
 ]
 
 
-def get_yearly_production_df(yyyy):
-    """연도별 생산 데이터를 조회합니다.
+@st.cache_data(ttl=600)
+def get_global_ncf_monthly_df(yyyy: int) -> pd.DataFrame:
+    """전체 공장의 연간 FM 부적합 수량을 집계합니다.
 
     Args:
-        yyyy (int): 조회할 연도
+        yyyy (int): 분석 대상 연도
 
     Returns:
-        pd.DataFrame: 생산 데이터프레임
+        pd.DataFrame: 전체 공장의 부적합 수량 데이터
+            - NCF_QTY: 부적합 수량
     """
-    query = f"""--sql
-    SELECT 
-        PLT_CD AS PLANT,
-        SUM(PRDT_QTY) AS PRDT_QTY
-    FROM HKT_DW.MES.WRK_F_LWRKTS118
-    WHERE 1=1
-        AND SUBSTRING(WRK_DATE, 1, 4) = '{yyyy}'
-    GROUP BY PLT_CD
-    """
-    df = get_client("snowflake").execute(query)
-    df.columns = df.columns.str.upper()
-    return df
-
-
-def get_monthly_fm_ncf_df(yyyy, ncf_list=fm_ncf_list):
-    query = q_ncf.ncf_monthly(yyyy=yyyy, ncf_list=ncf_list)
-    df = get_client("snowflake").execute(query)
-    df.columns = df.columns.str.upper()
-    return df
-
-
-def get_yearly_ncf_df(yyyy, ncf_list=fm_ncf_list):
-    """
-    연도별 부적합 데이터를 조회합니다.
-
-    Parameters
-    ----------
-    yyyy : int
-        조회할 연도
-    ncf_list : list, optional
-        조회할 부적합 코드 리스트. 기본값은 fm_ncf_list
-
-    Returns
-    -------
-    pandas.DataFrame
-        부적합 데이터프레임
-
-    Raises
-    ------
-    ValueError
-        ncf_list가 비어있거나 None인 경우
-    """
-
-    # 부적합 코드 리스트를 SQL IN 절에 사용할 수 있는 문자열로 변환
-    query = q_ncf.ncf_monthly(yyyy=yyyy, ncf_list=fm_ncf_list)
-    df = get_client("snowflake").execute(query)
-    df.columns = df.columns.str.upper()
-    return df
-
-
-def get_yearly_ppm_df(yyyy, ncf_list=fm_ncf_list):
-    df = pd.merge(
-        get_yearly_production_df(yyyy=yyyy)
-        .groupby("PLANT", as_index=False)["PRDT_QTY"]
-        .sum(),
-        get_yearly_ncf_df(yyyy=yyyy, ncf_list=ncf_list)
-        .groupby("PLANT", as_index=False)["NCF_QTY"]
-        .sum(),
-        on="PLANT",
-        how="left",
+    df_ncf = get_client("snowflake").execute(
+        q_ncf.ncf_monthly(yyyy=yyyy, ncf_list=fm_ncf_list)
     )
-    df["PPM"] = df["NCF_QTY"] / df["PRDT_QTY"] * 1_000_000
+    df_ncf.columns = df_ncf.columns.str.upper()
+    df_prdt = get_client("snowflake").execute(
+        q_production.curing_prdt_monthly_by_ym(yyyy=yyyy)
+    )
+    df_prdt.columns = df_prdt.columns.str.upper()
+
+    df_ncf = df_ncf.groupby("MM", as_index=False)["NCF_QTY"].sum()
+    df_ncf = df_ncf.sort_values(by="MM")
+    df_prdt = df_prdt.groupby("MM", as_index=False)["PRDT_QTY"].sum()
+    df_prdt = df_prdt.sort_values(by="MM")
+    df_ncf = pd.merge(df_ncf, df_prdt, on="MM", how="left")
+    df_ncf["PPM"] = df_ncf["NCF_QTY"] / df_ncf["PRDT_QTY"] * 1_000_000
+    return df_ncf
+
+
+@st.cache_data(ttl=600)
+def get_yearly_ncf_by_plant_df(yyyy: int, ncf_list: list = fm_ncf_list) -> pd.DataFrame:
+    """공장별 연간 FM 부적합 수량을 집계합니다.
+
+    Args:
+        yyyy (int): 분석 대상 연도
+        ncf_list (list, optional): 부적합 코드 리스트. 기본값은 fm_ncf_list
+
+    Returns:
+        pd.DataFrame: 공장별 부적합 수량 데이터
+            - PLANT: 공장 코드
+            - NCF_QTY: 부적합 수량
+    """
+    df = get_client("snowflake").execute(
+        q_ncf.ncf_monthly(yyyy=yyyy, ncf_list=ncf_list)
+    )
+    df.columns = df.columns.str.upper()
+    df = df.groupby("PLANT", as_index=False)["NCF_QTY"].sum()
+    df = df.sort_values(by="NCF_QTY", ascending=False)
     df = df.assign(
         PLANT=pd.Categorical(df["PLANT"], categories=config.plant_codes, ordered=True)
     ).sort_values(by="PLANT")
-
     return df
 
 
-def get_monthly_ppm_by_plant_df(yyyy, selected_plant, ncf_list=fm_ncf_list):
-    df_prdt = q_production.get_yearly_production_df(yyyy=yyyy)
-    df_prdt = (
-        df_prdt[df_prdt["PLANT"] == selected_plant]
-        .groupby("MM", as_index=False)["PRDT_QTY"]
-        .sum()
-    )
-    df_ncf = get_yearly_ncf_df(yyyy=yyyy, ncf_list=ncf_list)
-    df_ncf = (
-        df_ncf[df_ncf["PLANT"] == selected_plant]
-        .groupby("MM", as_index=False)["NCF_QTY"]
-        .sum()
-    )
-    df_plant_ncf_ppm_by_monthly = pd.merge(df_prdt, df_ncf, on="MM", how="left")
-    df_plant_ncf_ppm_by_monthly["PPM"] = (
-        df_plant_ncf_ppm_by_monthly["NCF_QTY"]
-        / df_plant_ncf_ppm_by_monthly["PRDT_QTY"]
-        * 1_000_000
-    )
+@st.cache_data(ttl=600)
+def get_yearly_ncf_ppm_by_plant_df(yyyy: int) -> pd.DataFrame:
+    """공장별 연간 FM 부적합 PPM을 계산합니다.
 
-    return df_plant_ncf_ppm_by_monthly
+    Args:
+        yyyy (int): 분석 대상 연도
+
+    Returns:
+        pd.DataFrame: 공장별 부적합 PPM 데이터
+            - PLANT: 공장 코드
+            - NCF_QTY: 부적합 수량
+            - PRDT_QTY: 생산 수량
+            - PPM: 부적합 PPM
+    """
+    df_ncf = get_yearly_ncf_by_plant_df(yyyy)
+    df_prdt = df_production.get_yearly_production_df(yyyy)
+    df_ncf_ppm = pd.merge(df_ncf, df_prdt, on="PLANT", how="left")
+    df_ncf_ppm["PPM"] = df_ncf_ppm["NCF_QTY"] / df_ncf_ppm["PRDT_QTY"] * 1_000_000
+    return df_ncf_ppm
 
 
-def get_ncf_detail_by_plant_df(yyyy, selected_plant, ncf_list=fm_ncf_list):
-    yyyy = yyyy or str(datetime.today().year)
-    selected_plant = selected_plant or "KP"
-    df = get_yearly_ncf_df(yyyy, ncf_list)
-    df = df[df["PLANT"] == selected_plant]
-    df = (
-        df.groupby("DFT_CD")["NCF_QTY"]
-        .sum()
-        .reset_index()
-        .sort_values(by="NCF_QTY", ascending=False)
+@st.cache_data(ttl=600)
+def get_monthly_ncf_ppm_by_plant_df(yyyy: int, plant: str) -> pd.DataFrame:
+    """특정 공장의 월별 FM 부적합 PPM 추이를 분석합니다.
+
+    Args:
+        yyyy (int): 분석 대상 연도
+        plant (str): 공장 코드
+
+    Returns:
+        pd.DataFrame: 월별 부적합 PPM 데이터
+            - MM: 월
+            - NCF_QTY: 부적합 수량
+            - PRDT_QTY: 생산 수량
+            - PPM: 부적합 PPM
+    """
+    # 부적합 데이터 조회 및 전처리
+    df_ncf = get_client("snowflake").execute(
+        q_ncf.ncf_monthly(yyyy=yyyy, ncf_list=fm_ncf_list)
     )
+    df_ncf.columns = df_ncf.columns.str.upper()
+
+    # 생산 데이터 조회 및 전처리
+    df_prdt = get_client("snowflake").execute(
+        q_production.curing_prdt_monthly_by_ym(yyyy=yyyy)
+    )
+    df_prdt.columns = df_prdt.columns.str.upper()
+
+    # 특정 공장 데이터 필터링 및 집계
+    df_ncf = df_ncf[df_ncf["PLANT"] == plant]
+    df_ncf = df_ncf.groupby("MM", as_index=False)["NCF_QTY"].sum()
+    df_ncf = df_ncf.sort_values(by="MM")
+
+    df_prdt = df_prdt[df_prdt["PLANT"] == plant]
+    df_prdt = df_prdt.groupby("MM", as_index=False)["PRDT_QTY"].sum()
+    df_prdt = df_prdt.sort_values(by="MM")
+
+    # PPM 계산
+    groupby_df = pd.merge(df_ncf, df_prdt, on="MM", how="left")
+    groupby_df["PPM"] = groupby_df["NCF_QTY"] / groupby_df["PRDT_QTY"] * 1_000_000
+    return groupby_df
+
+
+@st.cache_data(ttl=600)
+def get_ncf_detail_by_plant(yyyy: int, plant: str) -> pd.DataFrame:
+    """특정 공장의 불량 유형별 FM 부적합 현황을 분석합니다.
+
+    Args:
+        yyyy (int): 분석 대상 연도
+        plant (str): 공장 코드
+
+    Returns:
+        pd.DataFrame: 불량 유형별 부적합 수량 데이터
+            - DFT_CD: 불량 코드
+            - NCF_QTY: 부적합 수량
+    """
+    df = get_client("snowflake").execute(
+        q_ncf.ncf_monthly(yyyy=yyyy, ncf_list=fm_ncf_list)
+    )
+    df.columns = df.columns.str.upper()
+    df = df[df["PLANT"] == plant]
+    df = df.groupby("DFT_CD", as_index=False)["NCF_QTY"].sum()
+    df = df.sort_values(by="NCF_QTY", ascending=False)
     return df
-
-
-def main():
-    test_dataframe_by_itself(get_yearly_production_df, yyyy="2024")
-    test_dataframe_by_itself(get_yearly_ncf_df, yyyy="2024")
-    test_dataframe_by_itself(get_yearly_ppm_df, yyyy="2024")
-    test_dataframe_by_itself(
-        get_monthly_ppm_by_plant_df, yyyy="2024", selected_plant="KP"
-    )
-    test_dataframe_by_itself(
-        get_ncf_detail_by_plant_df,
-        yyyy="2024",
-        selected_plant="KP",
-    )
-
-
-if __name__ == "__main__":
-    main()
