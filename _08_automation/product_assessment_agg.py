@@ -5,10 +5,22 @@ OE Assessment 결과 집계 스크립트
 데이터는 SQLite 데이터베이스에서 로드되며, 결과는 mass_assess_result 테이블에 저장됩니다.
 """
 
+# 표준 라이브러리
+import os
+import sys
+import logging
+from datetime import datetime, timedelta
+from dataclasses import dataclass
+from typing import Dict, List, Tuple
+
 # 데이터 처리 및 분석 라이브러리
 import numpy as np
 import pandas as pd
 from scipy.stats import norm
+
+# 프로젝트 루트 경로 설정
+project_root = os.getenv("PROJECT_ROOT", os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(project_root)
 
 # 데이터베이스 및 쿼리 관련 모듈
 from _00_database.db_client import get_client
@@ -22,12 +34,6 @@ from _01_query.helper_sql import format_date_to_yyyymmdd
 # 전처리 모듈
 from _02_preprocessing.GMES.df_rr import get_rr_df, get_rr_oe_list_df
 from _02_preprocessing.GMES.df_uf import calculate_uf_pass_rate
-
-# 타입 힌팅 및 유틸리티
-from typing import Dict, List, Tuple
-from dataclasses import dataclass
-from datetime import datetime, timedelta
-import logging
 
 # 로깅 설정
 logging.basicConfig(
