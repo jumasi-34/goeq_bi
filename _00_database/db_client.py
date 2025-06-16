@@ -36,7 +36,7 @@ from functools import wraps
 import pandas as pd
 import streamlit as st
 import sqlite3
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, Engine
 from pathlib import Path
 
 # 프로젝트 루트 디렉토리를 Python 경로에 추가
@@ -77,7 +77,6 @@ class SnowflakeClient:
     """
 
     def __init__(self):
-
         self.config = {
             "user": "21300584",
             "password": "Jumasi21300584",
@@ -87,13 +86,35 @@ class SnowflakeClient:
             "schema": "KPPMES",
         }
 
-    def execute(self, query: str):
+    def _create_engine(self) -> Engine:
         """
-        Snowflake에 연결하여 쿼리를 실행한 후 DataFrame으로 반환합니다.
-        연결은 내부적으로 자동 열고 닫습니다.
+        SQLAlchemy 엔진을 생성합니다. PrivateLink 환경에서 SSL 인증서 오류 방지를 위해
+        ocsp_fail_open 옵션을 False로 설정합니다.
         """
-        snowflake_uri = f"snowflake://{self.config['user']}:{self.config['password']}@{self.config['account']}/{self.config['database']}/{self.config['schema']}?warehouse={self.config['warehouse']}"
-        engine = create_engine(snowflake_uri)
+        return create_engine(
+            "snowflake://",
+            connect_args={
+                "user": self.config["user"],
+                "password": self.config["password"],
+                "account": self.config["account"],
+                "warehouse": self.config["warehouse"],
+                "database": self.config["database"],
+                "schema": self.config["schema"],
+                "ocsp_fail_open": False,
+            },
+        )
+
+    def execute(self, query: str) -> pd.DataFrame:
+        """
+        Snowflake에 연결하여 주어진 쿼리를 실행한 결과를 DataFrame으로 반환합니다.
+
+        Args:
+            query (str): 실행할 SQL 쿼리
+
+        Returns:
+            pd.DataFrame: 쿼리 결과
+        """
+        engine = self._create_engine()
         try:
             return pd.read_sql(query, engine)
         finally:
