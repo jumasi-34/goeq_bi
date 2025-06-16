@@ -29,8 +29,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # 환경 변수 로드
-env_path = Path(project_root) / ".env"
-load_dotenv(dotenv_path=env_path)
+# env_path = Path(project_root) / ".env"
+# load_dotenv(dotenv_path=env_path)
 
 # 상수 정의
 SESSION_TIMEOUT_MINUTES = int(os.getenv("SESSION_TIMEOUT_MINUTES", "30"))
@@ -68,31 +68,25 @@ def verify_password(role: str, provided_password: str) -> bool:
     return FIXED_PASSWORDS.get(role) == provided_password
 
 
-@st.cache_data(ttl=3600)
 def load_personnel_df():
     """인사 데이터를 로드하고 전처리합니다.
 
     Returns:
         DataFrame: 전처리된 인사 데이터프레임
     """
-    try:
-        client = get_client("snowflake")
-        if client is None:
-            logger.error("Failed to get Snowflake client")
-            return None
-
-        df = client.execute(CTE_HR_PERSONAL)
-        if df is None or df.empty:
-            logger.error("No data returned from Snowflake query")
-            return None
-
-        df.columns = df.columns.str.upper()
-        df["PNL_NO"] = df["PNL_NO"].astype(int)
-        return df
-    except Exception as e:
-        logger.error(f"Database connection error: {str(e)}")
-        st.error("Failed to load personnel data. Please try again later.")
+    client = get_client("snowflake")
+    if client is None:
+        logger.error("Failed to get Snowflake client")
         return None
+
+    df = client.execute(CTE_HR_PERSONAL)
+    if df is None or df.empty:
+        logger.error("No data returned from Snowflake query")
+        return None
+
+    df.columns = df.columns.str.upper()
+    df["PNL_NO"] = df["PNL_NO"].astype(int)
+    return df
 
 
 def init_session_state():
