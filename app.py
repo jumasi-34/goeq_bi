@@ -19,7 +19,9 @@ import cx_Oracle
 # 프로젝트 루트 디렉토리를 Python 경로에 추가
 from _05_commons import config
 
-sys.path.append(config.PROJECT_ROOT)
+# 시스템 환경 변수에서 프로젝트 루트 경로를 가져옵니다
+project_root = os.getenv("PROJECT_ROOT", os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(project_root)
 
 # 로깅 설정
 logging.basicConfig(

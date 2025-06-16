@@ -24,8 +24,12 @@ import pandas as pd
 import plotly.graph_objects as go
 
 # 프로젝트 경로 설정
+import os
 from _05_commons import config
-sys.path.append(config.PROJECT_ROOT)
+
+# 시스템 환경 변수에서 프로젝트 루트 경로를 가져옵니다
+project_root = os.getenv("PROJECT_ROOT", os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(project_root)
 
 # 프로젝트 모듈
 from _05_commons import config, helper

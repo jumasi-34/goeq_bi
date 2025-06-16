@@ -25,10 +25,14 @@ DB 클라이언트를 사용하여 다양한 데이터베이스에서 쿼리를 
 - `test_query` 함수는 실행할 쿼리와 사용할 데이터베이스 종류를 인자로 받아 결과를 출력합니다.
 """
 
+import os
 import sys
 
-from _05_commons import config
-sys.path.append(config.PROJECT_ROOT)  # noqa
+# 프로젝트 루트 디렉토리를 Python 경로에 추가
+project_root = os.getenv(
+    "PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+)
+sys.path.append(project_root)
 
 from IPython.display import display
 import pandas as pd

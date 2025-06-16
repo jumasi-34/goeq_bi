@@ -39,11 +39,15 @@ import sqlite3
 from sqlalchemy import create_engine
 from pathlib import Path
 
+# 프로젝트 루트 디렉토리를 Python 경로에 추가
+project_root = os.getenv(
+    "PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+)
+sys.path.append(project_root)
+
 env_path = Path(__file__).resolve().parent.parent / ".env"
 load_dotenv(dotenv_path=env_path)
 
-from _05_commons import config
-sys.path.append(config.PROJECT_ROOT)
 from _05_commons import config
 
 

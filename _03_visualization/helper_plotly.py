@@ -2,6 +2,15 @@
 docstring
 """
 
+import os
+import sys
+
+# 프로젝트 루트 디렉토리를 Python 경로에 추가
+project_root = os.getenv(
+    "PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+)
+sys.path.append(project_root)
+
 import matplotlib.colors as mcolors
 
 

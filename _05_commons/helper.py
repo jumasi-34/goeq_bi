@@ -26,6 +26,13 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 import pandas as pd
+import os
+
+# 프로젝트 루트 디렉토리를 Python 경로에 추가
+project_root = os.getenv(
+    "PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+)
+sys.path.append(project_root)
 
 from _05_commons import config
 

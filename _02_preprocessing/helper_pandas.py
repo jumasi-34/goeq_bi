@@ -16,6 +16,15 @@ Pandas 기반 전처리 및 MTTC 계산 유틸
 - 캐시 불가능한 환경 대응용 캐시 함수
 """
 
+import os
+import sys
+
+# 프로젝트 루트 디렉토리를 Python 경로에 추가
+project_root = os.getenv(
+    "PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+)
+sys.path.append(project_root)
+
 from datetime import datetime
 from functools import wraps
 import numpy as np
@@ -146,7 +155,6 @@ class CountWorkingDays:
                 num_working_days.append(working_days)
 
         return pd.Series(num_working_days, index=self.df.index).astype("Int64")
-
 
 
 def test_dataframe_by_itself(func, *args, **kwargs):

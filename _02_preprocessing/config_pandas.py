@@ -14,6 +14,15 @@ CQMS 시스템 URL 설정
 - Streamlit에서 외부 링크 생성 시 활용
 """
 
+import os
+import sys
+
+# 프로젝트 루트 디렉토리를 Python 경로에 추가
+project_root = os.getenv(
+    "PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+)
+sys.path.append(project_root)
+
 from datetime import datetime
 import pandas as pd
 

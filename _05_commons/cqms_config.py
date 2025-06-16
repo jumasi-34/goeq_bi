@@ -3,7 +3,14 @@ CQMS 모니터링 대시보드 설정 파일
 """
 
 import os
+import sys
 from typing import Dict, List
+
+# 프로젝트 루트 디렉토리를 Python 경로에 추가
+project_root = os.getenv(
+    "PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+)
+sys.path.append(project_root)
 
 # 환경 설정
 ENV = os.getenv("CQMS_ENV", "development")

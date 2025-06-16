@@ -43,9 +43,15 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List
 import os
+import sys
+
+# 프로젝트 루트 디렉토리를 Python 경로에 추가
+project_root = os.getenv(
+    "PROJECT_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+)
+sys.path.append(project_root)
 
 # 시스템 설정
-PROJECT_ROOT: str = os.path.abspath(os.path.join(os.path.dirname(__file__), "../"))
 SQLITE_DB_PATH: str = "../database/goeq_database.db"
 DEV_MODE: bool = True
 
