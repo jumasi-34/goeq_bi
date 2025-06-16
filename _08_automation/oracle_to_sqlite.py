@@ -171,14 +171,11 @@ def generate_sellin_monthly_agg() -> tuple[bool, str]:
 
 
 def main():
-    try:
-        success, message = generate_sellin_monthly_agg()
-        if success:
-            logger.info(message)
-        else:
-            logger.error(message)
-    except Exception as e:
-        logger.error(f"프로그램 실행 중 예기치 않은 오류 발생: {str(e)}")
+    success, message = generate_sellin_monthly_agg()
+    if success:
+        print(message)
+    else:
+        print(message)
 
 
 if __name__ == "__main__":
