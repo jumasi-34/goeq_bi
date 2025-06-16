@@ -79,12 +79,12 @@ class SnowflakeClient:
     def __init__(self):
 
         self.config = {
-            "user": os.getenv("SF_USER"),
-            "password": os.getenv("SF_PASSWORD"),
-            "account": os.getenv("SF_ACCOUNT"),
-            "warehouse": os.getenv("SF_WAREHOUSE"),
-            "database": os.getenv("SF_DATABASE"),
-            "schema": os.getenv("SF_SCHEMA"),
+            "user": "21300584",
+            "password": "Jumasi21300584",
+            "account": "ls58031.ap-northeast-2.privatelink",
+            "warehouse": "SMALL_WH",
+            "database": "HKT_DW",
+            "schema": "KPPMES",
         }
 
     def execute(self, query: str):
