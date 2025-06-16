@@ -17,9 +17,14 @@ Global FM 현황 모니터링 대시보드
 import sys
 import streamlit as st
 import pandas as pd
+import os
 
 from _05_commons import config
-sys.path.append(config.PROJECT_ROOT)
+
+# 시스템 환경 변수에서 프로젝트 루트 경로를 가져옵니다
+project_root = os.getenv("PROJECT_ROOT", os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(project_root)
+
 
 from _02_preprocessing.GMES import df_ncf
 from _03_visualization._04_COLLABORATION import viz_fm_monitoring

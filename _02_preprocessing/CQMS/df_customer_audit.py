@@ -12,9 +12,13 @@ import sys
 import pandas as pd
 import streamlit as st
 from typing import Optional, Tuple, List
+import os
 
 from _05_commons import config
-sys.path.append(config.PROJECT_ROOT)
+
+# 시스템 환경 변수에서 프로젝트 루트 경로를 가져옵니다
+project_root = os.getenv("PROJECT_ROOT", os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(project_root)
 
 from _00_database.db_client import get_client
 from _01_query.CQMS import q_customer_audit

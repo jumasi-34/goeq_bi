@@ -9,9 +9,14 @@ CQMS 고객사 감사 쿼리 관리 모듈
 """
 
 import sys
+import os
 
 from _05_commons import config
-sys.path.append(config.PROJECT_ROOT)
+
+# 시스템 환경 변수에서 프로젝트 루트 경로를 가져옵니다
+project_root = os.getenv("PROJECT_ROOT", os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(project_root)
+
 from _01_query.helper_sql import test_query_by_itself
 
 # --- 감사 유형/상태 코드 매핑 상수 정의 ---

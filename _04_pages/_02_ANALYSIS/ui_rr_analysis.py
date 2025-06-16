@@ -5,9 +5,13 @@ RR 분석 대시보드
 import sys
 import streamlit as st
 from datetime import datetime as dt
+import os
 
 from _05_commons import config
-sys.path.append(config.PROJECT_ROOT)
+
+# 시스템 환경 변수에서 프로젝트 루트 경로를 가져옵니다
+project_root = os.getenv("PROJECT_ROOT", os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(project_root)
 
 from _03_visualization._02_ANALYSIS import viz_rr_analysis
 from _02_preprocessing.GMES.df_rr import (

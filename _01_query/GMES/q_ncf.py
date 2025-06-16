@@ -19,9 +19,14 @@ GMES 부적합(NCF) 쿼리 관리 모듈
 
 import sys
 from typing import Optional, List, Union
+import os
 
 from _05_commons import config
-sys.path.append(config.PROJECT_ROOT)
+
+# 시스템 환경 변수에서 프로젝트 루트 경로를 가져옵니다
+project_root = os.getenv("PROJECT_ROOT", os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(project_root)
+
 from _01_query.helper_sql import test_query_by_itself
 
 # --- SQL 쿼리 템플릿 정의 ---
