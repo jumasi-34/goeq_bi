@@ -196,7 +196,7 @@ def rr_oe_list() -> str:
 
 
 # ISO Local to HK Global 보정 계수 데이터 로드
-PATH = "_01_query/CSV/iso_local_to_hkGlobal.csv"
+PATH = os.path.join(project_root, "_01_query/CSV/iso_local_to_hkGlobal.csv")
 rr_corr_csv = pd.read_csv(PATH)
 
 
