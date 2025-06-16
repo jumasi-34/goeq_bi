@@ -11,6 +11,11 @@ GMES 롤링 저항(RR) 쿼리 관리 모듈
 import pandas as pd
 from typing import Optional, Union
 import logging
+import os
+import sys
+
+project_root = os.getenv("PROJECT_ROOT", os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(project_root)
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
