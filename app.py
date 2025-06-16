@@ -212,57 +212,50 @@ def logout():
 init_session_state()
 st.logo(image="_06_assets/logo.png", icon_image="_06_assets/logo_only.png")
 
-try:
-    if st.session_state.password_verified:
-        df_personnel = load_personnel_df()
-        if df_personnel is not None:
-            df_matched = df_personnel[
-                df_personnel["PNL_NO"] == st.session_state.personel_id
-            ]
+if st.session_state.password_verified:
+    df_personnel = load_personnel_df()
+    if df_personnel is not None:
+        df_matched = df_personnel[
+            df_personnel["PNL_NO"] == st.session_state.personel_id
+        ]
 
-            if df_matched.empty:
-                st.warning("No matching personnel ID record found.")
-                st.stop()
+        if df_matched.empty:
+            st.warning("No matching personnel ID record found.")
+            st.stop()
 
-            personel_nm = df_matched["PNL_NM"].values[0]
-            st.caption(
-                f":grey[Welcome,] **{personel_nm}**:grey[! You have access with] **{st.session_state.role}** :grey[privileges.]"
+        personel_nm = df_matched["PNL_NM"].values[0]
+        st.caption(
+            f":grey[Welcome,] **{personel_nm}**:grey[! You have access with] **{st.session_state.role}** :grey[privileges.]"
+        )
+
+        page_groups = {}
+        for title, page in PAGE_CONFIGS.items():
+            if st.session_state.role in page["roles"]:
+                CATEGORY = page["category"]
+                page = st.Page(page["filename"], title=title, icon=page["icon"])
+                page_groups.setdefault(CATEGORY, []).append(page)
+
+        # User Guide와 Workplace 사이에 구분선 추가
+        if "User Guide" in page_groups and "Workplace" in page_groups:
+            page_groups["User Guide"].append(
+                st.Page(
+                    lambda: st.divider(),
+                    title="------------------------------------------------",
+                    icon="",
+                )
             )
 
-            page_groups = {}
-            for title, page in PAGE_CONFIGS.items():
-                if st.session_state.role in page["roles"]:
-                    CATEGORY = page["category"]
-                    page = st.Page(page["filename"], title=title, icon=page["icon"])
-                    page_groups.setdefault(CATEGORY, []).append(page)
-
-            # User Guide와 Workplace 사이에 구분선 추가
-            if "User Guide" in page_groups and "Workplace" in page_groups:
-                page_groups["User Guide"].append(
-                    st.Page(
-                        lambda: st.divider(),
-                        title="------------------------------------------------",
-                        icon="",
-                    )
-                )
-
-            page_groups["System"] = page_groups.get("System", []) + [
-                st.Page(logout, title="Log out", icon=":material/logout:")
-            ]
-            pg = st.navigation(page_groups)
-        else:
-            st.error("Failed to load user data. Please try again later.")
-            pg = st.navigation([st.Page(login)])
+        page_groups["System"] = page_groups.get("System", []) + [
+            st.Page(logout, title="Log out", icon=":material/logout:")
+        ]
+        pg = st.navigation(page_groups)
     else:
+        st.error("Failed to load user data. Please try again later.")
         pg = st.navigation([st.Page(login)])
+else:
+    pg = st.navigation([st.Page(login)])
 
-    if pg is not None:
-        pg.run()
-    else:
-        st.error("Navigation initialization failed. Please refresh the page.")
-except Exception as e:
-    logger.error(f"Application error: {str(e)}")
-    st.error("An unexpected error occurred. Please try again later.")
-    if pg is None:
-        pg = st.navigation([st.Page(login)])
-        pg.run()
+if pg is not None:
+    pg.run()
+else:
+    st.error("Navigation initialization failed. Please refresh the page.")
