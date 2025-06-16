@@ -25,19 +25,6 @@ if config.DEV_MODE:
 
     importlib.reload(config)
 
-# 로깅 설정
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.FileHandler(
-            f'logs/oracle_to_sqlite_{datetime.now().strftime("%Y%m%d")}.log'
-        ),
-        logging.StreamHandler(),
-    ],
-)
-logger = logging.getLogger(__name__)
-
 # SQLite DB 파일 경로 설정
 DB_PATH = config.SQLITE_DB_PATH
 
