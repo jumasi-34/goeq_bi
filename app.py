@@ -17,20 +17,20 @@ import logging
 import cx_Oracle
 
 # 프로젝트 루트 디렉토리를 Python 경로에 추가
-from _05_commons import config
-
-# 시스템 환경 변수에서 프로젝트 루트 경로를 가져옵니다
 project_root = os.getenv("PROJECT_ROOT", os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(project_root)
 
 # 로깅 설정
 logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    filename=os.path.join(project_root, "logs", "app.log"),
 )
 logger = logging.getLogger(__name__)
 
 # 환경 변수 로드
-load_dotenv()
+env_path = Path(project_root) / ".env"
+load_dotenv(dotenv_path=env_path)
 
 # 상수 정의
 SESSION_TIMEOUT_MINUTES = int(os.getenv("SESSION_TIMEOUT_MINUTES", "30"))
@@ -44,11 +44,15 @@ from _00_database.db_client import get_client
 from _01_query.SAP.q_hk_personnel import CTE_HR_PERSONAL
 from _04_pages.config_pages import PAGE_CONFIGS
 from _05_commons.helper import SQLiteDML
+from _05_commons import config
 
 # 기본 설정
 st.set_page_config(layout="wide")
 DB_PATH = config.SQLITE_DB_PATH
 db_dml = SQLiteDML()
+
+# pg 변수 초기화
+pg = None
 
 
 def verify_password(role: str, provided_password: str) -> bool:
@@ -72,7 +76,16 @@ def load_personnel_df():
         DataFrame: 전처리된 인사 데이터프레임
     """
     try:
-        df = get_client("snowflake").execute(CTE_HR_PERSONAL)
+        client = get_client("snowflake")
+        if client is None:
+            logger.error("Failed to get Snowflake client")
+            return None
+
+        df = client.execute(CTE_HR_PERSONAL)
+        if df is None or df.empty:
+            logger.error("No data returned from Snowflake query")
+            return None
+
         df.columns = df.columns.str.upper()
         df["PNL_NO"] = df["PNL_NO"].astype(int)
         return df
@@ -205,46 +218,57 @@ def logout():
 init_session_state()
 st.logo(image="_06_assets/logo.png", icon_image="_06_assets/logo_only.png")
 
-if st.session_state.password_verified:
-    df_personnel = load_personnel_df()
-    if df_personnel is not None:
-        df_matched = df_personnel[
-            df_personnel["PNL_NO"] == st.session_state.personel_id
-        ]
+try:
+    if st.session_state.password_verified:
+        df_personnel = load_personnel_df()
+        if df_personnel is not None:
+            df_matched = df_personnel[
+                df_personnel["PNL_NO"] == st.session_state.personel_id
+            ]
 
-        if df_matched.empty:
-            st.warning("No matching personnel ID record found.")
-            st.stop()
+            if df_matched.empty:
+                st.warning("No matching personnel ID record found.")
+                st.stop()
 
-        personel_nm = df_matched["PNL_NM"].values[0]
-        st.caption(
-            f":grey[Welcome,] **{personel_nm}**:grey[! You have access with] **{st.session_state.role}** :grey[privileges.]"
-        )
-
-        page_groups = {}
-        for title, page in PAGE_CONFIGS.items():
-            if st.session_state.role in page["roles"]:
-                CATEGORY = page["category"]
-                page = st.Page(page["filename"], title=title, icon=page["icon"])
-                page_groups.setdefault(CATEGORY, []).append(page)
-
-        # User Guide와 Workplace 사이에 구분선 추가
-        if "User Guide" in page_groups and "Workplace" in page_groups:
-            page_groups["User Guide"].append(
-                st.Page(
-                    lambda: st.divider(),
-                    title="------------------------------------------------",
-                    icon="",
-                )
+            personel_nm = df_matched["PNL_NM"].values[0]
+            st.caption(
+                f":grey[Welcome,] **{personel_nm}**:grey[! You have access with] **{st.session_state.role}** :grey[privileges.]"
             )
 
-        page_groups["System"] = page_groups.get("System", []) + [
-            st.Page(logout, title="Log out", icon=":material/logout:")
-        ]
-        pg = st.navigation(page_groups)
-    else:
-        st.error("Failed to load user data. Please try again later.")
-else:
-    pg = st.navigation([st.Page(login)])
+            page_groups = {}
+            for title, page in PAGE_CONFIGS.items():
+                if st.session_state.role in page["roles"]:
+                    CATEGORY = page["category"]
+                    page = st.Page(page["filename"], title=title, icon=page["icon"])
+                    page_groups.setdefault(CATEGORY, []).append(page)
 
-pg.run()
+            # User Guide와 Workplace 사이에 구분선 추가
+            if "User Guide" in page_groups and "Workplace" in page_groups:
+                page_groups["User Guide"].append(
+                    st.Page(
+                        lambda: st.divider(),
+                        title="------------------------------------------------",
+                        icon="",
+                    )
+                )
+
+            page_groups["System"] = page_groups.get("System", []) + [
+                st.Page(logout, title="Log out", icon=":material/logout:")
+            ]
+            pg = st.navigation(page_groups)
+        else:
+            st.error("Failed to load user data. Please try again later.")
+            pg = st.navigation([st.Page(login)])
+    else:
+        pg = st.navigation([st.Page(login)])
+
+    if pg is not None:
+        pg.run()
+    else:
+        st.error("Navigation initialization failed. Please refresh the page.")
+except Exception as e:
+    logger.error(f"Application error: {str(e)}")
+    st.error("An unexpected error occurred. Please try again later.")
+    if pg is None:
+        pg = st.navigation([st.Page(login)])
+        pg.run()
