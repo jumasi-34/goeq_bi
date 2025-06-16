@@ -1,89 +1,76 @@
-"""
-HOPE Sell-in 데이터 수동 집계 도구
-- Oracle DB에서 데이터를 가져와 SQLite DB에 저장
-- 저장된 데이터를 피벗 테이블 형태로 표시
-"""
-
 import sys
+from pathlib import Path
+
+sys.path.append(str(Path(__file__).parent.parent.parent))
 import streamlit as st
-import os
-import pandas as pd
-
-from _05_commons import config
-sys.path.append(config.PROJECT_ROOT)
-
-from _00_database import db_client
-from _01_query.HOPE.q_hope import oe_app
-from _05_commons import config
 from _08_automation.oracle_to_sqlite import generate_sellin_monthly_agg
+from _08_automation.product_assessment_agg import main as run_product_assessment
+import logging
+from datetime import datetime
+import os
 
-if config.DEV_MODE:
-    import importlib
 
-    importlib.reload(db_client)
-    importlib.reload(config)
+def run_manual_aggregation():
+    """
+    수동 집계 실행 함수
 
-st.divider()
-cols = st.columns([4, 1], vertical_alignment="bottom")
-cols[0].title("HOPE Sell-in 수동 집계 도구")
-cols[0].write("Oracle 데이터를 집계하여 SQLite에 저장합니다.")
+    Returns
+    -------
+    None
+        집계 실행 결과를 Streamlit UI에 표시합니다.
+    """
+    try:
+        st.info("집계를 시작합니다...")
+        generate_sellin_monthly_agg()
+        st.success("집계가 완료되었습니다!")
 
-# 버튼 생성
-if cols[1].button("HOPE Sellin 집계 실행", use_container_width=True):
-    with st.spinner("집계 중입니다. 잠시만 기다려 주세요..."):
-        try:
-            success, message = generate_sellin_monthly_agg()
-            if success:
-                st.success(f"✅ {message}")
-            else:
-                st.error(f"❌ {message}")
-                st.stop()  # 에러 발생 시 이후 코드 실행 중단
+    except Exception as e:
+        st.error(f"집계 중 오류가 발생했습니다: {str(e)}")
+        logging.error(f"집계 오류: {str(e)}")
 
-            # SQLite에서 데이터 조회
-            sqlite_query = """--sql
-            SELECT * 
-            FROM sellin_monthly_agg
-            """
-            sqlite_db = db_client.get_client("sqlite")
-            df = sqlite_db.execute(sqlite_query)
 
-            if df is None or df.empty:
-                st.warning("저장된 데이터가 없습니다.")
-                st.stop()
+def run_product_assessment_aggregation():
+    """
+    제품 평가 집계 실행 함수
 
-            # OE 데이터 조회 및 병합
-            try:
-                oe_app_df = db_client.get_client("snowflake").execute(oe_app())
-                oe_app_df.columns = oe_app_df.columns.str.upper()
-                oe_app_df = oe_app_df[["M_CODE", "PLANT"]].drop_duplicates()
+    Returns
+    -------
+    None
+        집계 실행 결과를 Streamlit UI에 표시합니다.
+    """
+    try:
+        st.info("제품 평가 집계를 시작합니다...")
+        run_product_assessment()
+        st.success("제품 평가 집계가 완료되었습니다!")
 
-                df = df.merge(oe_app_df, on=["M_CODE"], how="left")
-                df["M_CODE"] = df["M_CODE"].str.upper()
+    except Exception as e:
+        st.error(f"제품 평가 집계 중 오류가 발생했습니다: {str(e)}")
+        logging.error(f"제품 평가 집계 오류: {str(e)}")
 
-                # 피벗 테이블 생성
-                pivot_df = df.pivot_table(
-                    index="PLANT",
-                    columns=["YYYY", "MM"],
-                    values="SUPP_QTY",
-                    aggfunc="sum",
-                )
 
-                # 데이터 표시
-                st.subheader("월별 집계 데이터")
-                st.dataframe(pivot_df, use_container_width=True)
+# 페이지 제목
+st.title("Manual Data Aggregation")
 
-                # 통계 정보 표시
-                st.subheader("기본 통계")
-                stats_df = (
-                    df.groupby("PLANT")["SUPP_QTY"]
-                    .agg(["sum", "mean", "count"])
-                    .round(2)
-                )
-                stats_df.columns = ["총계", "평균", "건수"]
-                st.dataframe(stats_df, use_container_width=True)
+# 탭 생성
+tab1, tab2 = st.tabs(["Sell-in Data", "Product Assessment"])
 
-            except Exception as e:
-                st.error(f"데이터 처리 중 오류 발생: {str(e)}")
+# Sell-in Data 탭
+with tab1:
+    st.markdown(
+        """
+    이 탭에서는 HOPE 셀인 데이터를 월별로 집계하여 SQLite 데이터베이스에 저장합니다.
+    """
+    )
+    if st.button("Run Sell-in Aggregation", type="primary"):
+        run_manual_aggregation()
 
-        except Exception as e:
-            st.error(f"처리 중 예기치 않은 오류 발생: {str(e)}")
+# Product Assessment 탭
+with tab2:
+    st.markdown(
+        """
+    이 탭에서는 제품 평가 데이터를 집계하여 SQLite 데이터베이스에 저장합니다.
+    """
+    )
+    st.image("_06_assets/Diagram/product_assessment.png")
+    if st.button("Run Product Assessment Aggregation", type="primary"):
+        run_product_assessment_aggregation()

@@ -12,8 +12,7 @@ from typing import Optional
 from pathlib import Path
 
 # 프로젝트 루트 디렉토리를 Python 경로에 추가
-from _05_commons import config
-sys.path.append(config.PROJECT_ROOT)
+# sys.path.append(config.PROJECT_ROOT)
 
 from _00_database.db_client import get_client
 from _05_commons import config

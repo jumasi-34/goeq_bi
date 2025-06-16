@@ -16,6 +16,11 @@ from dotenv import load_dotenv
 import logging
 import cx_Oracle
 
+# 프로젝트 루트 디렉토리를 Python 경로에 추가
+from _05_commons import config
+
+sys.path.append(config.PROJECT_ROOT)
+
 # 로깅 설정
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -33,15 +38,10 @@ ROLES = ["Viewer", "Contributor", "Admin"]
 # 고정 비밀번호 설정
 FIXED_PASSWORDS = {"Contributor": "January", "Admin": "December"}
 
-from _05_commons import config
-
-sys.path.append(config.PROJECT_ROOT)
-
 from _00_database.db_client import get_client
 from _01_query.SAP.q_hk_personnel import CTE_HR_PERSONAL
 from _04_pages.config_pages import PAGE_CONFIGS
 from _05_commons.helper import SQLiteDML
-from _05_commons import config
 
 # 기본 설정
 st.set_page_config(layout="wide")

@@ -74,21 +74,21 @@ PAGE_CONFIGS = {
         "filename": "_04_pages/_06_WORKPLACE/ui_oeassessment_target_manage.py",
         "icon": ":material/settings:",
         "category": "Workplace",
-        "roles": ["Admin"],
+        "roles": ["Contributor", "Admin"],
     },
     # Settings
     "Manual Aggregator": {
         "filename": "_04_pages/_07_SETTINGS/ui_manual_aggregator.py",
         "icon": ":material/query_stats:",
         "category": "Settings",
-        "roles": ["Admin"],
+        "roles": ["Contributor", "Admin"],
     },
     # Admin
     "OE Assessment Result": {
         "filename": "_04_pages/_08_ADMIN/ui_oeassessment_result_viewer.py",
         "icon": ":material/assessment:",
         "category": "Admin",
-        "roles": ["Admin"],
+        "roles": ["Contributor", "Admin"],
     },
     "Database Explorer": {
         "filename": "_04_pages/_08_ADMIN/ui_db_explorer.py",
