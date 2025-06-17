@@ -14,9 +14,6 @@ from datetime import datetime, timedelta
 project_root = Path(__file__).parent.parent.parent
 sys.path.append(str(project_root))
 
-from _08_automation.oracle_to_sqlite import main as generate_sellin_monthly_agg
-from _08_automation.product_assessment import main as run_product_assessment
-
 # 세션 상태 초기화
 if "active_tab" not in st.session_state:
     st.session_state.active_tab = "Sell-in Data"
@@ -24,7 +21,6 @@ if "last_run_time" not in st.session_state:
     st.session_state.last_run_time = None
 
 
-@st.cache_data(ttl=3600)  # 1시간 동안 캐시 유지
 def run_manual_aggregation():
     """
     HOPE 셀인 데이터의 수동 집계를 실행하는 함수
@@ -35,6 +31,9 @@ def run_manual_aggregation():
         집계 실행 결과를 Streamlit UI에 표시합니다.
     """
     try:
+        # 필요한 모듈을 함수 내부에서 import
+        from _08_automation.oracle_to_sqlite import main as generate_sellin_monthly_agg
+
         progress_bar = st.progress(0)
         status_text = st.empty()
 
@@ -54,7 +53,6 @@ def run_manual_aggregation():
         st.error(f"집계 중 오류가 발생했습니다: {str(e)}")
 
 
-@st.cache_data(ttl=3600)  # 1시간 동안 캐시 유지
 def run_product_assessment_aggregation():
     """
     제품 평가 데이터의 수동 집계를 실행하는 함수
@@ -65,6 +63,9 @@ def run_product_assessment_aggregation():
         집계 실행 결과를 Streamlit UI에 표시합니다.
     """
     try:
+        # 필요한 모듈을 함수 내부에서 import
+        from _08_automation.product_assessment import main as run_product_assessment
+
         progress_bar = st.progress(0)
         status_text = st.empty()
 
@@ -104,9 +105,17 @@ with tab1:
     이 탭에서는 HOPE 셀인 데이터를 월별로 집계하여 SQLite 데이터베이스에 저장합니다.
     """
     )
+
+    # 버튼 클릭 상태를 세션 상태에 저장
+    if "run_sellin_clicked" not in st.session_state:
+        st.session_state.run_sellin_clicked = False
+
+    # 버튼 클릭 시에만 집계 실행
     if st.button("Run Sell-in Aggregation", type="primary"):
+        st.session_state.run_sellin_clicked = True
         st.session_state.active_tab = "Sell-in Data"
         run_manual_aggregation()
+        st.session_state.run_sellin_clicked = False
 
 # 제품 평가 데이터 집계 탭
 with tab2:
@@ -115,9 +124,17 @@ with tab2:
     이 탭에서는 제품 평가 데이터를 집계하여 SQLite 데이터베이스에 저장합니다.
     """
     )
+
+    # 버튼 클릭 상태를 세션 상태에 저장
+    if "run_product_assessment_clicked" not in st.session_state:
+        st.session_state.run_product_assessment_clicked = False
+
+    # 버튼 클릭 시에만 집계 실행
     if st.button("Run Product Assessment Aggregation", type="primary"):
+        st.session_state.run_product_assessment_clicked = True
         st.session_state.active_tab = "Product Assessment"
         run_product_assessment_aggregation()
+        st.session_state.run_product_assessment_clicked = False
 
     # 이미지 로딩을 지연시키기 위해 expander 사용
     with st.expander("제품 평가 프로세스 다이어그램 보기"):
