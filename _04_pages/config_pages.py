@@ -105,7 +105,13 @@ PAGE_CONFIGS = {
         "category": "Admin",
         "roles": ["Admin"],
     },
-    "TEST": {
+    "SQLite Management": {
+        "filename": "_04_pages/_08_ADMIN/sqlite_management.py",
+        "icon": ":material/query_stats:",
+        "category": "Admin",
+        "roles": ["Admin"],
+    },
+    "test": {
         "filename": "_04_pages/_08_ADMIN/test.py",
         "icon": ":material/query_stats:",
         "category": "Admin",

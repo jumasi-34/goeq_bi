@@ -38,6 +38,7 @@ import streamlit as st
 import sqlite3
 from sqlalchemy import create_engine, Engine
 from pathlib import Path
+import logging
 
 # 프로젝트 루트 디렉토리를 Python 경로에 추가
 project_root = os.getenv(
@@ -196,14 +197,21 @@ class SQLiteClient:
             df: 삽입할 DataFrame
             table_name: 대상 테이블 이름
         """
+        if df is None or df.empty:
+            raise ValueError("삽입할 데이터가 없습니다.")
+
         conn = sqlite3.connect(self.db_path)
         try:
             df.to_sql(table_name, conn, if_exists="replace", index=False)
+            conn.commit()
+        except Exception as e:
+            conn.rollback()
+            raise Exception(f"데이터 저장 중 오류 발생: {str(e)}")
         finally:
             conn.close()
 
 
-@cache_resource_safe(ttl=3600)
+# @cache_resource_safe(ttl=3600)
 def get_client(db_type: str = "snowflake"):
     """
     주어진 DB 종류에 맞는 클라이언트 객체를 반환합니다.
@@ -232,6 +240,9 @@ def get_client(db_type: str = "snowflake"):
 
 
 def main():
+    logging.warning("==== main() 함수 진입 ====")
+    print("==== main() 함수 진입 ====")
+
     # Snowflake 테스트
     print("Testing Snowflake Client...")
     snowflake_query = """--sql

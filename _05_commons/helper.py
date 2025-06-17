@@ -85,36 +85,8 @@ def format_number(num: Union[int, float]) -> str:
 class SQLiteDML:
     """SQLite 데이터 조작(DML) 작업을 위한 클래스"""
 
-    DB_PATH = Path("../database/goeq_database.db")
-
     def __init__(self) -> None:
-        self.db_path = self.DB_PATH
-        self._create_tables()
-
-    def _create_tables(self):
-        """필요한 테이블들을 생성합니다."""
-        # 로그인 기록 테이블
-        self.execute_query(
-            """
-            CREATE TABLE IF NOT EXISTS logins (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                employee_id INTEGER NOT NULL,
-                login_time DATETIME NOT NULL
-            )
-        """
-        )
-
-        # 사용자 비밀번호 테이블
-        self.execute_query(
-            """
-            CREATE TABLE IF NOT EXISTS user_passwords (
-                employee_id INTEGER PRIMARY KEY,
-                password_hash TEXT NOT NULL,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-        """
-        )
+        self.db_path = config.SQLITE_DB_PATH
 
     def execute_query(self, query: str, params: Tuple = ()) -> None:
         """
@@ -156,41 +128,6 @@ class SQLiteDML:
         query = f"INSERT INTO {table} ({column_names}) VALUES ({placeholders})"
         self.execute_query(query, values)
 
-    def select_data(
-        self,
-        table: str,
-        columns: Optional[List[str]] = None,
-        condition: str = "",
-        params: Tuple = (),
-    ) -> pd.DataFrame:
-        """
-        조건부 SELECT 쿼리를 실행합니다.
-
-        Args:
-            table: 대상 테이블
-            columns: 선택할 컬럼 리스트 (None일 경우 모든 컬럼)
-            condition: WHERE 절 조건
-            params: 쿼리 파라미터
-
-        Returns:
-            pd.DataFrame: 쿼리 결과
-        """
-        column_names = ", ".join(columns) if columns else "*"
-        query = f"SELECT {column_names} FROM {table} {condition}"
-        return self.fetch_query(query, params)
-
-    def delete_data(self, table: str, condition: str, params: Tuple) -> None:
-        """
-        조건부 DELETE 쿼리를 실행합니다.
-
-        Args:
-            table: 대상 테이블
-            condition: WHERE 절 조건
-            params: 쿼리 파라미터
-        """
-        query = f"DELETE FROM {table} {condition}"
-        self.execute_query(query, params)
-
     def list_tables(self) -> List[str]:
         """
         데이터베이스의 모든 테이블 이름을 반환합니다.
@@ -202,42 +139,105 @@ class SQLiteDML:
         tables = self.fetch_query(query)
         return tables["name"].tolist()
 
-
-class SQLiteDDL:
-    """SQLite 스키마 정의(DDL) 작업을 위한 클래스"""
-
-    def __init__(self, db_path: str) -> None:
-        self.db_path = db_path
-
-    def execute_query(self, query: str) -> None:
-        """
-        DDL 쿼리를 실행합니다.
-
-        Args:
-            query: 실행할 SQL 쿼리
-        """
-        with sqlite3.connect(self.db_path) as conn:
-            conn.execute(query)
-            conn.commit()
-
-    def create_table(self, table: str, columns: List[Tuple[str, str]]) -> None:
-        """
-        테이블을 생성합니다.
-
-        Args:
-            table: 생성할 테이블 이름
-            columns: (컬럼명, 데이터타입) 튜플 리스트
-        """
-        column_defs = ", ".join(f"{name} {dtype}" for name, dtype in columns)
-        query = f"CREATE TABLE IF NOT EXISTS {table} ({column_defs})"
-        self.execute_query(query)
-
     def drop_table(self, table: str) -> None:
         """
-        테이블을 삭제합니다.
+        지정된 테이블을 데이터베이스에서 삭제합니다.
 
         Args:
             table: 삭제할 테이블 이름
         """
         query = f"DROP TABLE IF EXISTS {table}"
         self.execute_query(query)
+
+
+class SQLiteDDL:
+    """SQLite 데이터 정의(DDL) 작업을 위한 클래스"""
+
+    def __init__(self, db_path: str = config.SQLITE_DB_PATH) -> None:
+        self.db_path = db_path
+
+    def create_table(self, table_name: str, columns: List[Tuple[str, str]]) -> None:
+        """
+        새로운 테이블을 생성합니다.
+
+        Args:
+            table_name: 생성할 테이블 이름
+            columns: (컬럼명, 데이터타입) 튜플의 리스트
+        """
+        column_defs = ", ".join([f"{col[0]} {col[1]}" for col in columns])
+        query = f"CREATE TABLE IF NOT EXISTS {table_name} ({column_defs})"
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute(query)
+            conn.commit()
+
+    def get_table_schema(self, table_name: str) -> pd.DataFrame:
+        """
+        테이블의 스키마 정보를 반환합니다.
+
+        Args:
+            table_name: 테이블 이름
+
+        Returns:
+            pd.DataFrame: 테이블 스키마 정보
+        """
+        query = f"PRAGMA table_info({table_name})"
+        with sqlite3.connect(self.db_path) as conn:
+            return pd.read_sql_query(query, conn)
+
+    def alter_table_add_column(
+        self, table_name: str, column_name: str, data_type: str
+    ) -> None:
+        """
+        테이블에 새로운 컬럼을 추가합니다.
+
+        Args:
+            table_name: 테이블 이름
+            column_name: 추가할 컬럼 이름
+            data_type: 컬럼 데이터 타입
+        """
+        query = f"ALTER TABLE {table_name} ADD COLUMN {column_name} {data_type}"
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute(query)
+            conn.commit()
+
+    def alter_table_rename_column(
+        self, table_name: str, old_name: str, new_name: str
+    ) -> None:
+        """
+        테이블의 컬럼 이름을 변경합니다.
+
+        Args:
+            table_name: 테이블 이름
+            old_name: 기존 컬럼 이름
+            new_name: 새로운 컬럼 이름
+        """
+        # SQLite는 직접적인 컬럼 이름 변경을 지원하지 않으므로 임시 테이블을 사용
+        schema = self.get_table_schema(table_name)
+        columns = [
+            (row["name"] if row["name"] != old_name else new_name, row["type"])
+            for _, row in schema.iterrows()
+        ]
+
+        # 임시 테이블 생성
+        temp_table = f"{table_name}_temp"
+        self.create_table(temp_table, columns)
+
+        # 데이터 복사
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute(f"INSERT INTO {temp_table} SELECT * FROM {table_name}")
+            conn.execute(f"DROP TABLE {table_name}")
+            conn.execute(f"ALTER TABLE {temp_table} RENAME TO {table_name}")
+            conn.commit()
+
+    def execute_custom_sql(self, query: str) -> pd.DataFrame:
+        """
+        사용자 정의 SQL 쿼리를 실행합니다.
+
+        Args:
+            query: 실행할 SQL 쿼리
+
+        Returns:
+            pd.DataFrame: 쿼리 결과
+        """
+        with sqlite3.connect(self.db_path) as conn:
+            return pd.read_sql_query(query, conn)

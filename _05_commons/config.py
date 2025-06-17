@@ -46,7 +46,7 @@ import os
 import sys
 
 # 시스템 설정
-SQLITE_DB_PATH: str = "../database/goeq_database.db"
+SQLITE_DB_PATH: str = os.path.expanduser("~/database/goeq_database.db")
 DEV_MODE: bool = True
 
 # 날짜 관련 상수

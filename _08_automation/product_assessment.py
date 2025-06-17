@@ -1,277 +1,353 @@
 """
-대상규격기준으로 집계 및 DB에 저장하는 모듈입니다.
-
-이 모듈은 다음과 같은 기능을 수행합니다:
-1. 대상 규격 데이터를 DB에서 로드
-2. 각 규격별로 180일간의 품질 데이터 수집
-3. 수집된 데이터를 항목별로 집계
-4. 집계 결과를 DB에 저장
-
-Returns:
-    None
+대량 생산 제품의 품질 평가를 위한 모듈입니다.
+생산 데이터, NCF, UF, GT weight, RR, CTL 등의 데이터를 수집하고 분석하여
+제품의 품질 지표를 계산합니다.
 """
 
+from _00_database.db_client import get_client
 import sys
 import os
-
-from _05_commons import config
-
-# 시스템 환경 변수에서 프로젝트 루트 경로를 가져옵니다
-project_root = os.getenv("PROJECT_ROOT", os.path.dirname(os.path.abspath(__file__)))
-sys.path.append(project_root)
-
-
+import streamlit as st
+from datetime import datetime, timedelta
 import pandas as pd
 import numpy as np
-import streamlit as st
-from typing import List, Dict, Any
+from scipy.stats import norm
+from dataclasses import dataclass
 
-from _00_database.db_client import get_client, SQLiteClient
-from _01_query.GMES.q_production import curing_prdt_monthly
-from _01_query.GMES.q_ncf import ncf_monthly
-from _01_query.GMES.q_rr import rr, rr_oe_list
+# 프로젝트 루트 디렉토리를 Python 경로에 추가
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from _01_query.GMES.q_production import curing_prdt_daily
+from _01_query.GMES.q_ncf import ncf_daily
 from _01_query.GMES.q_weight import gt_wt_assess
-from _01_query.GMES.q_ctl import ctl_raw
-from _02_preprocessing import config_pandas
-from _02_preprocessing import helper_pandas
-from _02_preprocessing import data
+from _01_query.GMES.q_ctl import get_ctl_raw_query
+from _01_query.helper_sql import format_date_to_yyyymmdd
+from _02_preprocessing.GMES.df_rr import get_rr_df, get_rr_oe_list_df
+from _02_preprocessing.GMES.df_uf import calculate_uf_pass_rate
 
-# 상수 정의
-DB_PATH = "D:/OneDrive - HKNC/@ Project_CQMS/database/goeq_database.db"
-ASSESSMENT_PERIOD_DAYS = 180
+# 대량 평가 결과 테이블의 스키마 정의
+MASS_ASSESS_RESULT_SCHEMA = [
+    ("m_code", "TEXT"),  # 제품 코드
+    ("min_date", "TEXT"),  # 최소 날짜
+    ("max_date", "TEXT"),  # 최대 날짜
+    ("total_qty", "INTEGER"),  # 총 생산량
+    ("ncf_qty", "INTEGER"),  # NCF 수량
+    ("uf_pass_rate", "REAL"),  # UF 합격률
+    ("gt_wt_pass_rate", "REAL"),  # GT weight 합격률
+    ("rr_pass_rate_pdf", "REAL"),  # RR 합격률 (PDF 기반)
+    ("ctl_pass_rate", "REAL"),  # CTL 합격률
+    ("created_at", "TEXT"),  # 생성 시간
+]
 
 
-# 데이터 로드 함수
-def load_target_specifications(db_client: SQLiteClient) -> pd.DataFrame:
-    """대상 규격 데이터를 DB에서 로드합니다.
+@dataclass
+class DateRange:
+    """날짜 범위를 저장하는 데이터 클래스"""
+
+    start_date: str  # 시작 날짜 (YYYY-MM-DD)
+    end_date: str  # 종료 날짜 (YYYY-MM-DD)
+    formatted_start: str  # 시작 날짜 (YYYYMMDD)
+    formatted_end: str  # 종료 날짜 (YYYYMMDD)
+
+
+def calculate_pass_rate_with_pdf(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    확률밀도함수를 사용하여 합격률을 계산합니다.
 
     Args:
-        db_client: SQLiteClient 인스턴스
+        df (pd.DataFrame): 평균과 표준편차가 포함된 데이터프레임
 
     Returns:
-        pd.DataFrame: 대상 규격 데이터프레임
+        pd.DataFrame: 합격률이 추가된 데이터프레임
     """
-    query = """--sql
-        SELECT * FROM OE_Assess_Target_Specifications
+
+    def get_pass_rate(row: pd.Series) -> float:
+        """개별 행에 대한 합격률을 계산합니다."""
+        if pd.isna(row["spec_max"]) or pd.isna(row["spec_min"]):
+            return np.nan
+
+        mean, std = row["avg"], row["std"]
+        if std == 0 or pd.isna(std):
+            return np.nan
+
+        upper_prob = norm.cdf(row["spec_max"], loc=mean, scale=std)
+        lower_prob = norm.cdf(row["spec_min"], loc=mean, scale=std)
+        return upper_prob - lower_prob
+
+    return df.assign(rr_pass_rate_pdf=df.apply(get_pass_rate, axis=1))
+
+
+def get_date_range(start_date: datetime) -> DateRange:
     """
-    df_target = db_client.execute(query)
-    return df_target.assign(
-        START_MASS_PRODUCTION=pd.to_datetime(
-            df_target["START_MASS_PRODUCTION"], errors="coerce"
-        ),
+    주어진 시작 날짜로부터 180일 범위의 날짜를 계산합니다.
+
+    Args:
+        start_date (datetime): 시작 날짜
+
+    Returns:
+        DateRange: 계산된 날짜 범위
+    """
+    end_date = start_date + timedelta(days=180)
+    start_date_str = start_date.strftime("%Y-%m-%d")
+    end_date_str = end_date.strftime("%Y-%m-%d")
+
+    return DateRange(
+        start_date=start_date_str,
+        end_date=end_date_str,
+        formatted_start=format_date_to_yyyymmdd(start_date_str),
+        formatted_end=format_date_to_yyyymmdd(end_date_str),
     )
 
 
-# 데이터 수집 함수
-def collect_quality_data(
-    m_code: str,
-    m_code_rr: str,
-    start_date: pd.Timestamp,
-    end_date: pd.Timestamp,
-) -> Dict[str, pd.DataFrame]:
-    """특정 규격에 대한 품질 데이터를 수집합니다.
+def collect_production_data(mcode: str, date_range: DateRange) -> pd.DataFrame:
+    """
+    생산 데이터를 수집하고 집계합니다.
 
     Args:
-        m_code: 규격 코드
-        m_code_rr: RR 규격 코드
-        start_date: 시작일
-        end_date: 종료일
+        mcode (str): 제품 코드
+        date_range (DateRange): 날짜 범위
 
     Returns:
-        Dict[str, pd.DataFrame]: 수집된 품질 데이터 딕셔너리
+        pd.DataFrame: 집계된 생산 데이터
     """
-    return {
-        "prdt": get_client("snowflake").execute(
-            curing_prdt_monthly(
-                mcode_list=[m_code], yyyy=start_date.year, mm=start_date.month
-            )
-        ),
-        "ncf": get_client("snowflake").execute(
-            ncf_monthly(
-                mcode_list=[m_code],
-                start_date=start_date.strftime("%Y-%m-%d"),
-                end_date=end_date.strftime("%Y-%m-%d"),
-            )
-        ),
-        "uf": get_client("snowflake").execute(
-            rr(
-                start_date=start_date.strftime("%Y-%m-%d"),
-                end_date=end_date.strftime("%Y-%m-%d"),
-                test_fg="OE",
-            )
-        ),
-        "gt_wt": get_client("snowflake").execute(
-            rr(
-                start_date=start_date.strftime("%Y-%m-%d"),
-                end_date=end_date.strftime("%Y-%m-%d"),
-                test_fg="OE",
-            )
-        ),
-        "rr": get_client("snowflake").execute(
-            rr(
-                start_date=start_date.strftime("%Y-%m-%d"),
-                end_date=end_date.strftime("%Y-%m-%d"),
-                test_fg="OE",
-            )
-        ),
-        "ctl": get_client("snowflake").execute(
-            ctl_raw(mcode=m_code, start_date=start_date, end_date=end_date)
-        ),
-    }
+    prdt_df = get_client("snowflake").execute(
+        curing_prdt_daily(
+            mcode_list=[mcode],
+            start_date=date_range.formatted_start,
+            end_date=date_range.formatted_end,
+        )
+    )
+    # 컬럼명을 소문자로 변환
+    prdt_df.columns = prdt_df.columns.str.lower()
+    return (
+        prdt_df.groupby(["m_code"])
+        .agg(
+            min_date=("wrk_date", "min"),
+            max_date=("wrk_date", "max"),
+            total_qty=("prdt_qty", "sum"),
+        )
+        .reset_index()
+    )
 
 
-# 데이터 집계 함수
-def aggregate_quality_data(
-    df_list: Dict[str, List[pd.DataFrame]], criteria_tbl: pd.DataFrame
+def collect_ncf_data(mcode: str, date_range: DateRange) -> pd.DataFrame:
+    """
+    NCF 데이터를 수집하고 집계합니다.
+
+    Args:
+        mcode (str): 제품 코드
+        date_range (DateRange): 날짜 범위
+
+    Returns:
+        pd.DataFrame: 집계된 NCF 데이터
+    """
+    ncf_df = get_client("snowflake").execute(
+        ncf_daily(
+            mcode_list=[mcode],
+            start_date=date_range.formatted_start,
+            end_date=date_range.formatted_end,
+        )
+    )
+    # 컬럼명을 소문자로 변환
+    ncf_df.columns = ncf_df.columns.str.lower()
+    return ncf_df.groupby(["m_code"]).agg(ncf_qty=("dft_qty", "sum")).reset_index()
+
+
+def process_ctl_data(ctl_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    CTL 데이터를 처리하여 합격률을 계산합니다.
+
+    Args:
+        ctl_df (pd.DataFrame): CTL 원본 데이터
+
+    Returns:
+        pd.DataFrame: 합격률이 계산된 CTL 데이터
+    """
+    ctl_df = ctl_df.groupby(["m_code", "jdg"]).size().reset_index(name="count")
+    ctl_pivot = ctl_df.pivot(index="m_code", columns="jdg", values="count").fillna(0)
+
+    if "OK" in ctl_pivot.columns and "NI" in ctl_pivot.columns:
+        ctl_pivot["ctl_pass_rate"] = ctl_pivot["OK"] / (
+            ctl_pivot["NI"] + ctl_pivot["OK"]
+        )
+    else:
+        ctl_pivot["ctl_pass_rate"] = 0
+
+    return ctl_pivot.reset_index()
+
+
+def merge_all_data(
+    prdt_df: pd.DataFrame,
+    ncf_df: pd.DataFrame,
+    uf_df: pd.DataFrame,
+    gt_wt_df: pd.DataFrame,
+    rr_df: pd.DataFrame,
+    ctl_df: pd.DataFrame,
 ) -> pd.DataFrame:
-    """수집된 품질 데이터를 집계합니다.
+    """
+    모든 데이터를 병합하여 최종 결과를 생성합니다.
 
     Args:
-        df_list: 수집된 데이터 리스트 딕셔너리
-        criteria_tbl: 기준 정보 테이블
+        prdt_df (pd.DataFrame): 생산 데이터
+        ncf_df (pd.DataFrame): NCF 데이터
+        uf_df (pd.DataFrame): UF 데이터
+        gt_wt_df (pd.DataFrame): GT weight 데이터
+        rr_df (pd.DataFrame): RR 데이터
+        ctl_df (pd.DataFrame): CTL 데이터
 
     Returns:
-        pd.DataFrame: 집계된 품질 데이터
+        pd.DataFrame: 병합된 최종 결과
     """
-    # 데이터프레임 연결
-    dfs = {k: pd.concat(v, ignore_index=True) for k, v in df_list.items()}
-
-    # 생산량 집계
-    groupby_agg_prdt = (
-        dfs["prdt"]
-        .groupby("M_CODE")
-        .agg(
-            MASS_START=("DATE", "min"),
-            MASS_END=("DATE", "max"),
-            PRDT_QTY=("PRDT_QTY", "sum"),
-        )
-    )
-
-    # 부적합 집계
-    groupby_agg_ncf = (
-        dfs["ncf"]
-        .groupby("M_CODE")
-        .agg(
-            DFT_QTY=("DFT_QTY", "sum"),
-        )
-        .sort_values("DFT_QTY")
-    )
-
-    # Uniformity 집계
-    df_agg_uf = dfs["uf"].set_index("M_CODE")[
-        ["UF_INS_QTY", "UF_PASS_QTY", "PASS_RATE"]
-    ]
-
-    # GT Weight 집계
-    df_agg_gt_wt = dfs["gt_wt"].set_index("M_CODE")[
-        ["WT_INS_QTY", "WT_PASS_QTY", "WT_PASS"]
-    ]
-
-    # RR 집계
-    rr_criteria = criteria_tbl[["M_CODE", "SPEC_MIN", "SPEC_MAX"]]
-    df_agg_rr = pd.merge(dfs["rr"], rr_criteria, how="left", on="M_CODE")
-
-    groupby_agg_rr = df_agg_rr.groupby("M_CODE").agg(
-        SPEC_MIN=("SPEC_MIN", "min"),
-        SPEC_MAX=("SPEC_MAX", "min"),
-        mean=("Result_new", "mean"),
-        std=("Result_new", "std"),
-        count=("Result_new", "count"),
-    )
-
-    groupby_agg_rr = (
-        groupby_agg_rr.assign(
-            margin=np.minimum(
-                (groupby_agg_rr["SPEC_MAX"] - groupby_agg_rr["mean"])
-                / (groupby_agg_rr["std"] * 3),
-                (groupby_agg_rr["mean"] - groupby_agg_rr["SPEC_MIN"])
-                / (groupby_agg_rr["std"] * 3),
-            )
-        )
-        .reset_index(drop=False)
-        .merge(
-            criteria_tbl[["M_CODE", "M_CODE_RR"]],
-            how="left",
-            left_on="M_CODE",
-            right_on="M_CODE_RR",
-        )
-        .drop(labels="M_CODE_x", axis=1)
-        .rename(columns={"M_CODE_y": "M_CODE"})
-        .set_index("M_CODE")
-    )
-
-    # CTL 집계
-    groupby_agg_ctl = (
-        dfs["ctl"]
-        .groupby("M_CODE")
-        .agg(
-            OK=("JDG", lambda x: (x == "OK").sum()),
-            NI=("JDG", lambda x: (x == "NI").sum()),
-            NO=("JDG", lambda x: (x == "NO").sum()),
-        )
-    )
-    groupby_agg_ctl = groupby_agg_ctl.assign(
-        ctl_pass_rate=groupby_agg_ctl["OK"]
-        / (groupby_agg_ctl["OK"] + groupby_agg_ctl["NI"])
-    )
-
-    # 전체 데이터 병합
-    return pd.concat(
-        [
-            groupby_agg_prdt,
-            groupby_agg_ncf,
-            df_agg_uf,
-            df_agg_gt_wt,
-            groupby_agg_rr,
-            groupby_agg_ctl,
-        ],
-        axis=1,
-        join="outer",
-        ignore_index=False,
-    ).reset_index()
-
-
-# 메인 실행 코드
-def main():
-    """메인 실행 함수"""
     try:
-        # 데이터 로더 초기화
-        db_client = SQLiteClient()
-        criteria_tbl = db_client.execute("SELECT * FROM OE_Assess_Criteria")
+        # 데이터 병합
+        result_df = prdt_df.copy()
 
-        # 대상 규격 데이터 로드
-        df_target = load_target_specifications(db_client)
+        # NCF 데이터 병합
+        if not ncf_df.empty:
+            result_df = result_df.merge(ncf_df, on=["m_code"], how="left")
 
-        # 데이터 수집
-        df_list = {"prdt": [], "ncf": [], "uf": [], "gt_wt": [], "rr": [], "ctl": []}
+        # UF 데이터 병합
+        if not uf_df.empty:
+            result_df = result_df.merge(uf_df, on=["m_code"], how="left")
 
-        for _, row in df_target.iterrows():
-            if pd.notna(row["START_MASS_PRODUCTION"]):
-                start_date = row["START_MASS_PRODUCTION"].date()
-                end_date = (
-                    row["START_MASS_PRODUCTION"]
-                    + pd.Timedelta(days=ASSESSMENT_PERIOD_DAYS)
-                ).date()
+        # GT weight 데이터 병합
+        if not gt_wt_df.empty:
+            result_df = result_df.merge(gt_wt_df, on=["m_code"], how="left")
 
-                quality_data = collect_quality_data(
-                    row["M_CODE"], row["M_CODE_RR"], start_date, end_date
+        # RR 데이터 병합
+        if not rr_df.empty:
+            rr_cols = ["m_code", "count", "rr_pass_rate_pdf"]
+            available_cols = [col for col in rr_cols if col in rr_df.columns]
+            if available_cols:
+                result_df = result_df.merge(
+                    rr_df[available_cols], on=["m_code"], how="left"
                 )
 
-                for k, v in quality_data.items():
-                    df_list[k].append(v)
+        # CTL 데이터 병합
+        if not ctl_df.empty:
+            result_df = result_df.merge(
+                ctl_df[["m_code", "ctl_pass_rate"]], on=["m_code"], how="left"
+            )
 
-        # 데이터 집계
-        concat_agg = aggregate_quality_data(df_list, criteria_tbl)
+        # 결측값 처리
+        result_df = result_df.fillna(0)
 
-        # DB 저장
-        db_client.insert_dataframe(concat_agg, "agg_oe_assess_quality_data")
-
-        st.success("품질 데이터 집계 및 저장이 완료되었습니다.")
+        return result_df
 
     except Exception as e:
-        st.error(f"오류가 발생했습니다: {str(e)}")
-        raise
+        st.error(f"Error in merge_all_data: {str(e)}")
+        return pd.DataFrame()
 
 
-if __name__ == "__main__":
-    main()
+def process_single_mcode(row: pd.Series) -> pd.DataFrame:
+    """단일 M-code에 대한 데이터를 처리합니다."""
+    mcode = row["M_CODE"]
+    mcode_rr = row["M_CODE_RR"]
+    date_range = get_date_range(pd.to_datetime(row["START_MASS_PRODUCTION"]))
+
+    try:
+        # 데이터 수집
+        prdt_df = collect_production_data(mcode, date_range)
+        if prdt_df.empty:
+            st.warning(f"No production data found for M-code: {mcode}")
+            return pd.DataFrame()
+
+        ncf_df = collect_ncf_data(mcode, date_range)
+        uf_df = calculate_uf_pass_rate(
+            mcode, date_range.formatted_start, date_range.formatted_end
+        )
+        # UF 데이터 컬럼명 소문자로 변환
+        uf_df.columns = uf_df.columns.str.lower()
+
+        gt_wt_df = get_client("snowflake").execute(
+            gt_wt_assess(
+                mcode_list=mcode,
+                start_date=date_range.formatted_start,
+                end_date=date_range.formatted_end,
+            )
+        )
+        # GT weight 데이터 컬럼명 소문자로 변환
+        gt_wt_df.columns = gt_wt_df.columns.str.lower()
+
+        # RR 데이터 처리
+        _, rr_df, _ = get_rr_df(
+            mcode_list=mcode_rr,
+            start_date=date_range.start_date,
+            end_date=date_range.end_date,
+        )
+        # RR 데이터 컬럼명 소문자로 변환
+        rr_df.columns = rr_df.columns.str.lower()
+
+        rr_list = get_rr_oe_list_df()
+        # RR 리스트 데이터 컬럼명 소문자로 변환
+        rr_list.columns = rr_list.columns.str.lower()
+
+        rr_list = rr_list[rr_list["m_code"] == mcode_rr][
+            ["m_code", "plant", "spec_max", "spec_min"]
+        ]
+
+        # RR 데이터와 spec 정보 병합
+        rr_df = pd.merge(rr_df, rr_list, on=["m_code", "plant"], how="left")
+
+        # 합격률 계산
+        rr_df = calculate_pass_rate_with_pdf(rr_df)
+
+        # CTL 데이터 처리
+        ctl_df = get_client("snowflake").execute(
+            get_ctl_raw_query(
+                start_date=date_range.formatted_start,
+                end_date=date_range.formatted_end,
+                mcode=mcode,
+            )
+        )
+        # CTL 데이터 컬럼명 소문자로 변환
+        ctl_df.columns = ctl_df.columns.str.lower()
+        ctl_df = process_ctl_data(ctl_df)
+
+        # 데이터 병합
+        result_df = merge_all_data(prdt_df, ncf_df, uf_df, gt_wt_df, rr_df, ctl_df)
+
+        if result_df.empty:
+            st.warning(f"No data after merging for M-code: {mcode}")
+            return pd.DataFrame()
+
+        return result_df
+
+    except Exception as e:
+        st.error(f"Error processing M-code {mcode}: {str(e)}")
+        return pd.DataFrame()
+
+
+def main():
+    # SQLite 클라이언트 초기화
+    sqlite_manager = get_client("sqlite")
+
+    # 타겟 데이터 로드
+    target_df = sqlite_manager.execute("SELECT * FROM mass_assess_target")
+
+    # 테스트를 위해 첫 3개 행만 선택
+    target_df = target_df.head(3)
+
+    # 각 M-code 처리
+    all_results = []
+    for idx, row in target_df.iterrows():
+        result_df = process_single_mcode(row)
+        if not result_df.empty:
+            # 생성 시간 추가
+            result_df["created_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            all_results.append(result_df)
+
+    if all_results:
+        # 결과 저장
+        final_df = pd.concat(all_results, ignore_index=True)
+
+        # 결과 저장
+        try:
+            # 기존 데이터 삭제
+            sqlite_manager.execute("DELETE FROM mass_assess_result")
+        except Exception as e:
+            # 새로운 데이터 저장
+            sqlite_manager.insert_dataframe(final_df, "mass_assess_result")
+
+
+main()

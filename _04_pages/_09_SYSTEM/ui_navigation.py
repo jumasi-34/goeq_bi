@@ -15,7 +15,7 @@ import streamlit as st
 
 from _04_pages.config_pages import PAGE_CONFIGS
 from _00_database.db_client import get_client
-from _05_commons.helper import SQLiteDDL, SQLiteDML
+from _05_commons.helper import SQLiteDML
 
 sqlite_db = SQLiteDML()
 
