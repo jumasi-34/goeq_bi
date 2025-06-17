@@ -326,7 +326,7 @@ def main():
     target_df = sqlite_manager.execute("SELECT * FROM mass_assess_target")
 
     # 테스트를 위해 첫 3개 행만 선택
-    target_df = target_df.head(3)
+    # target_df = target_df.head(3)
 
     # 각 M-code 처리
     all_results = []
