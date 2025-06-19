@@ -46,5 +46,5 @@ merge_login = merge_login.assign(
 merge_login["login_time"] = merge_login["login_time"].dt.tz_localize("UTC")
 merge_login["login_time"] = merge_login["login_time"].dt.tz_convert("Asia/Seoul")
 
-st.dataframe(merge_login, use_container_width=True)
+st.dataframe(merge_login, use_container_width=True, height=700)
 print(merge_login.dtypes)

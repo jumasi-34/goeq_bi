@@ -93,7 +93,7 @@ PAGE_CONFIGS = {
         "roles": ["Contributor", "Admin"],
     },
     # Admin
-    "OE Assessment Result": {
+    "Product Assessment Result(OE)": {
         "filename": "_04_pages/_08_ADMIN/ui_oeassessment_result_viewer.py",
         "icon": ":material/assessment:",
         "category": "Admin",

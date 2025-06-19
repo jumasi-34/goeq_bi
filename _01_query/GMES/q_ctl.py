@@ -44,95 +44,10 @@ CTMS_MRM_ITEM = (
 
 
 def get_ctl_raw_query(
-    start_date: str = "20240101", end_date: str = "20241231", mcode: str = None
-) -> str:
-    """CTMS 측정 데이터의 기본 쿼리를 생성합니다.
-
-    Args:
-        start_date (str, optional): 시작일자. Defaults to '20240101'.
-        end_date (str, optional): 종료일자. Defaults to '20241231'.
-        mcode (str, optional): 제품코드. Defaults to None.
-
-    Returns:
-        str: CTMS 측정 데이터 조회를 위한 기본 SQL 쿼리
-    """
-    mcode_filter = f"AND SUBSTR(MFG_CD, 5, 7) = '{mcode}'" if mcode else ""
-
-    return f"""--sql
-    SELECT
-        MRM_RPT_NO DOC_NO,                                -- 레포트넘버
-        PLT_CD PLANT,                                     -- 공장
-        TO_DATE(MRM_DATE, 'YYYYMMDD') MRM_DATE,           -- 생산일
-        MRM_OBJ_FG MRM_PURPOSE,                           -- 측정 목적
-        CTL_ITEM_NM MRM_ITEM,                             -- 측정 항목
-        STXC,                                             -- 시방 구분
-        SUBSTR(MFG_CD, 5, 7) M_CODE,                      -- 제품 코드
-        SPEC_SIZE,                                        -- SIZE
-        SPEC_PTRN,                                        -- 패턴
-        'UPPER' SIDE,                                     -- 상한
-        U_SPEC_VAL SPEC,                                  -- 스펙
-        TOL_VAL TOL,                                      -- 허용치
-        CASE                                              -- 하한          
-            WHEN LOWER(TOL_VAL) LIKE '%min%' THEN REGEXP_SUBSTR(TOL_VAL, '[0-9.]+')
-            ELSE REGEXP_SUBSTR(U_SPEC_VAL, '[0-9.]+') - REGEXP_SUBSTR(TOL_VAL, '[0-9.]+')
-        END AS LL,
-        CASE                                              -- 상한          
-            WHEN LOWER(TOL_VAL) LIKE '%min%' THEN NULL
-            ELSE REGEXP_SUBSTR(U_SPEC_VAL, '[0-9.]+') + REGEXP_SUBSTR(TOL_VAL, '[0-9.]+')
-        END AS UL,
-        U_MRM_AVG ACTUAL,                                 -- 측정값
-        U_MRM_RST JDG,                                    -- 판정결과
-        TO_DATE(PRDT_DATE, 'YYYYMMDD') PRDT_DATE          -- 생산일
-    FROM
-        HKT_DW.BI_DWUSER.CTMS_RESULT_DATA CTL
-    WHERE
-        1=1
-        AND MRM_DATE BETWEEN '{start_date}' AND '{end_date}' -- 원하는 연월 범위 지정
-        AND STXC IN ('S', 'M', 'V')
-        AND MRM_PURPOSE IN {CTMS_PURPOSE}
-        AND MRM_ITEM IN {CTMS_MRM_ITEM}
-        {mcode_filter}
-    UNION ALL            
-    SELECT
-        MRM_RPT_NO DOC_NO,                                -- 레포트넘버
-        PLT_CD PLANT,                                     -- 공장
-        TO_DATE(MRM_DATE, 'YYYYMMDD') MRM_DATE,           -- 생산일
-        MRM_OBJ_FG MRM_PURPOSE,                           -- 측정 목적
-        CTL_ITEM_NM MRM_ITEM,                             -- 측정 항목
-        STXC,                                             -- 시방 구분
-        SUBSTR(MFG_CD, 5, 7) M_CODE,                      -- 제품 코드
-        SPEC_SIZE,                                        -- SIZE
-        SPEC_PTRN,                                        -- 패턴
-        'LOWER' SIDE,                                     -- 하한
-        L_SPEC_VAL SPEC,                                  -- 스펙
-        TOL_VAL TOL,                                      -- 허용치
-        CASE                                              -- 하한          
-            WHEN LOWER(TOL_VAL) LIKE '%min%' THEN REGEXP_SUBSTR(TOL_VAL, '[0-9.]+')
-            ELSE REGEXP_SUBSTR(U_SPEC_VAL, '[0-9.]+') - REGEXP_SUBSTR(TOL_VAL, '[0-9.]+')
-        END AS LL, 
-        CASE                                              -- 상한          
-            WHEN LOWER(TOL_VAL) LIKE '%min%' THEN NULL
-            ELSE REGEXP_SUBSTR(U_SPEC_VAL, '[0-9.]+') + REGEXP_SUBSTR(TOL_VAL, '[0-9.]+')
-        END AS UL,
-        L_MRM_AVG ACTUAL,                                 -- 측정값
-        L_MRM_RST JDG,                                    -- 판정결과
-        TO_DATE(PRDT_DATE, 'YYYYMMDD') PRDT_DATE          -- 생산일
-    FROM
-        HKT_DW.BI_DWUSER.CTMS_RESULT_DATA
-    WHERE
-        1=1
-        AND MRM_DATE BETWEEN '{start_date}' AND '{end_date}' -- 원하는 연월 범위 지정
-        AND STXC IN ('S', 'M')
-        AND MRM_PURPOSE IN {CTMS_PURPOSE}
-        AND MRM_ITEM IN {CTMS_MRM_ITEM}
-        {mcode_filter}
-    """
-
-
-def get_ctl_raw_individual_query(
     start_date: str | None = None,
     end_date: str | None = None,
     mcode: str | None = None,
+    use_safe_cast: bool = True,
 ) -> str:
     """CTMS 측정 데이터의 기본 쿼리를 생성합니다.
 
@@ -140,6 +55,7 @@ def get_ctl_raw_individual_query(
         start_date (str | None, optional): 시작일자. Defaults to None.
         end_date (str | None, optional): 종료일자. Defaults to None.
         mcode (str | None, optional): 제품코드. Defaults to None.
+        use_safe_cast (bool, optional): 안전한 타입 캐스팅 사용 여부. Defaults to True.
 
     Returns:
         str: CTMS 측정 데이터 조회를 위한 기본 SQL 쿼리
@@ -152,25 +68,17 @@ def get_ctl_raw_individual_query(
         date_filter = f"AND MRM_DATE >= '{start_date}'"
     elif end_date:
         date_filter = f"AND MRM_DATE <= '{end_date}'"
+    else:
+        # 기본값 설정 (기존 get_ctl_raw_query 호환성)
+        date_filter = "AND MRM_DATE BETWEEN '20240101' AND '20241231'"
 
     # 제품코드 필터 조건 생성
     mcode_filter = f"AND SUBSTR(MFG_CD, 5, 7) = '{mcode}'" if mcode else ""
 
-    return f"""--sql
-    SELECT
-        MRM_RPT_NO DOC_NO,                                -- 레포트넘버
-        PLT_CD PLANT,                                     -- 공장
-        TO_DATE(MRM_DATE, 'YYYYMMDD') MRM_DATE,           -- 생산일
-        MRM_OBJ_FG MRM_PURPOSE,                           -- 측정 목적
-        CTL_ITEM_NM MRM_ITEM,                             -- 측정 항목
-        STXC,                                             -- 시방 구분
-        SUBSTR(MFG_CD, 5, 7) M_CODE,                      -- 제품 코드
-        SPEC_SIZE,                                        -- SIZE
-        SPEC_PTRN,                                        -- 패턴
-        'UPPER' SIDE,                                     -- 상한
-        U_SPEC_VAL SPEC,                                  -- 스펙
-        TOL_VAL TOL,                                      -- 허용치
-        CASE                                              -- 하한          
+    # 안전한 캐스팅 로직 선택
+    if use_safe_cast:
+        ll_case = """
+        CASE                                              
             WHEN LOWER(TOL_VAL) LIKE '%min%' THEN 
                 CASE 
                     WHEN REGEXP_SUBSTR(TOL_VAL, '[0-9.]+') IS NOT NULL 
@@ -185,8 +93,10 @@ def get_ctl_raw_individual_query(
                          TRY_CAST(REGEXP_SUBSTR(TOL_VAL, '[0-9.]+') AS FLOAT)
                     ELSE NULL 
                 END
-        END AS LL,
-        CASE                                              -- 상한          
+        END AS LL"""
+
+        ul_case = """
+        CASE                                              
             WHEN LOWER(TOL_VAL) LIKE '%min%' THEN NULL
             ELSE 
                 CASE 
@@ -196,7 +106,36 @@ def get_ctl_raw_individual_query(
                          TRY_CAST(REGEXP_SUBSTR(TOL_VAL, '[0-9.]+') AS FLOAT)
                     ELSE NULL 
                 END
-        END AS UL,
+        END AS UL"""
+    else:
+        ll_case = """
+        CASE                                              
+            WHEN LOWER(TOL_VAL) LIKE '%min%' THEN REGEXP_SUBSTR(TOL_VAL, '[0-9.]+')
+            ELSE REGEXP_SUBSTR(U_SPEC_VAL, '[0-9.]+') - REGEXP_SUBSTR(TOL_VAL, '[0-9.]+')
+        END AS LL"""
+
+        ul_case = """
+        CASE                                              
+            WHEN LOWER(TOL_VAL) LIKE '%min%' THEN NULL
+            ELSE REGEXP_SUBSTR(U_SPEC_VAL, '[0-9.]+') + REGEXP_SUBSTR(TOL_VAL, '[0-9.]+')
+        END AS UL"""
+
+    return f"""--sql
+    SELECT
+        MRM_RPT_NO DOC_NO,                                -- 레포트넘버
+        PLT_CD PLANT,                                     -- 공장
+        TO_DATE(MRM_DATE, 'YYYYMMDD') MRM_DATE,           -- 생산일
+        MRM_OBJ_FG MRM_PURPOSE,                           -- 측정 목적
+        CTL_ITEM_NM MRM_ITEM,                             -- 측정 항목
+        STXC,                                             -- 시방 구분
+        SUBSTR(MFG_CD, 5, 7) M_CODE,                      -- 제품 코드
+        SPEC_SIZE,                                        -- SIZE
+        SPEC_PTRN,                                        -- 패턴
+        'UPPER' SIDE,                                     -- 상한
+        U_SPEC_VAL SPEC,                                  -- 스펙
+        TOL_VAL TOL,                                      -- 허용치
+        {ll_case},
+        {ul_case},
         U_MRM_AVG ACTUAL,                                 -- 측정값
         U_MRM_RST JDG,                                    -- 판정결과
         TO_DATE(PRDT_DATE, 'YYYYMMDD') PRDT_DATE          -- 생산일
@@ -223,33 +162,8 @@ def get_ctl_raw_individual_query(
         'LOWER' SIDE,                                     -- 하한
         L_SPEC_VAL SPEC,                                  -- 스펙
         TOL_VAL TOL,                                      -- 허용치
-        CASE                                              -- 하한          
-            WHEN LOWER(TOL_VAL) LIKE '%min%' THEN 
-                CASE 
-                    WHEN REGEXP_SUBSTR(TOL_VAL, '[0-9.]+') IS NOT NULL 
-                    THEN TRY_CAST(REGEXP_SUBSTR(TOL_VAL, '[0-9.]+') AS FLOAT)
-                    ELSE NULL 
-                END
-            ELSE 
-                CASE 
-                    WHEN REGEXP_SUBSTR(L_SPEC_VAL, '[0-9.]+') IS NOT NULL 
-                         AND REGEXP_SUBSTR(TOL_VAL, '[0-9.]+') IS NOT NULL
-                    THEN TRY_CAST(REGEXP_SUBSTR(L_SPEC_VAL, '[0-9.]+') AS FLOAT) - 
-                         TRY_CAST(REGEXP_SUBSTR(TOL_VAL, '[0-9.]+') AS FLOAT)
-                    ELSE NULL 
-                END
-        END AS LL, 
-        CASE                                              -- 상한          
-            WHEN LOWER(TOL_VAL) LIKE '%min%' THEN NULL
-            ELSE 
-                CASE 
-                    WHEN REGEXP_SUBSTR(L_SPEC_VAL, '[0-9.]+') IS NOT NULL 
-                         AND REGEXP_SUBSTR(TOL_VAL, '[0-9.]+') IS NOT NULL
-                    THEN TRY_CAST(REGEXP_SUBSTR(L_SPEC_VAL, '[0-9.]+') AS FLOAT) + 
-                         TRY_CAST(REGEXP_SUBSTR(TOL_VAL, '[0-9.]+') AS FLOAT)
-                    ELSE NULL 
-                END
-        END AS UL,
+        {ll_case.replace('U_SPEC_VAL', 'L_SPEC_VAL')}, 
+        {ul_case.replace('U_SPEC_VAL', 'L_SPEC_VAL')},
         L_MRM_AVG ACTUAL,                                 -- 측정값
         L_MRM_RST JDG,                                    -- 판정결과
         TO_DATE(PRDT_DATE, 'YYYYMMDD') PRDT_DATE          -- 생산일

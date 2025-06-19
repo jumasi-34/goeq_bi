@@ -1,3 +1,21 @@
+"""
+OE Assessment 결과 시각화 모듈
+
+이 모듈은 OE Assessment 결과를 다양한 차트와 그래프로 시각화하는 함수들을 제공합니다.
+Plotly Graph Objects를 사용하여 인터랙티브한 차트를 생성합니다.
+
+주요 기능:
+- 생산량 바 차트
+- NCF (부적합) 분석 차트
+- UF (Uniformity) 분석 차트
+- 중량 분포 분석 차트
+- RR (Reliability) 분석 차트
+- CTL (Control) 분석 차트
+
+작성자: [작성자명]
+최종 수정일: [날짜]
+"""
+
 import plotly.graph_objects as go
 from _03_visualization import config_plotly
 from plotly.subplots import make_subplots
@@ -7,6 +25,22 @@ import pandas as pd
 
 # 생산량
 def draw_barplot_production(df):
+    """
+    생산량 월별 바 차트를 생성합니다.
+
+    Args:
+        df (pd.DataFrame): 생산량 데이터프레임
+            - YYYYMM: 년월 (str)
+            - PRDT_QTY: 생산량 (int/float)
+
+    Returns:
+        go.Figure: 생산량 바 차트
+
+    시각화 특징:
+        - 오렌지색 바 차트
+        - Y축 범위는 최대값의 1.2배로 설정
+        - X축은 카테고리 순서로 정렬
+    """
     trace = go.Bar(
         x=df["YYYYMM"],
         y=df["PRDT_QTY"],
@@ -30,6 +64,21 @@ def draw_barplot_production(df):
 
 # 부적합
 def draw_barplot_ncf(df):
+    """
+    NCF (부적합) 월별 바 차트를 생성합니다.
+
+    Args:
+        df (pd.DataFrame): NCF 데이터프레임
+            - YYYYMM: 년월 (str)
+            - DFT_QTY: 부적합 수량 (int/float)
+
+    Returns:
+        go.Figure: NCF 바 차트
+
+    시각화 특징:
+        - 오렌지색 바 차트
+        - Y축 범위는 최대값의 1.2배로 설정
+    """
     trace = go.Bar(
         x=df["YYYYMM"],
         y=df["DFT_QTY"],
@@ -48,6 +97,23 @@ def draw_barplot_ncf(df):
 
 
 def draw_barplot_ncf_pareto(df):
+    """
+    NCF 부적합코드별 파레토 차트를 생성합니다.
+
+    Args:
+        df (pd.DataFrame): NCF 파레토 데이터프레임
+            - DFT_CD: 부적합 코드 (str)
+            - DFT_QTY: 부적합 수량 (int/float)
+            - CUM_PCT: 누적 백분율 (float)
+
+    Returns:
+        go.Figure: NCF 파레토 차트
+
+    시각화 특징:
+        - 회색 바 차트 (부적합 수량)
+        - 빨간색 선 그래프 (누적 백분율)
+        - 이중 Y축 사용
+    """
     trace1 = go.Scatter(
         x=df["DFT_CD"],
         y=df["CUM_PCT"],
@@ -85,6 +151,25 @@ def draw_barplot_ncf_pareto(df):
 
 # UF
 def draw_barplot_uf(df):
+    """
+    UF (Uniformity) 월별 합격률 차트를 생성합니다.
+
+    Args:
+        df (pd.DataFrame): UF 데이터프레임
+            - YYYYMM: 년월 (str)
+            - UF_INS_QTY: 검사 수량 (int/float)
+            - UF_PASS_QTY: 합격 수량 (int/float)
+            - PASS_RATE: 합격률 (float)
+
+    Returns:
+        go.Figure: UF 합격률 차트
+
+    시각화 특징:
+        - 그룹 바 차트 (검사 수량, 합격 수량)
+        - 선 그래프 (합격률)
+        - 이중 Y축 사용
+        - 가로 범례 배치
+    """
     trace1 = go.Bar(
         x=df["YYYYMM"],
         y=df["UF_INS_QTY"],
@@ -152,7 +237,30 @@ def draw_barplot_uf(df):
 
 
 def draw_barplot_uf_individual(df_raw, df_standard):
+    """
+    UF 개별 항목별 히스토그램을 생성합니다.
 
+    Args:
+        df_raw (pd.DataFrame): UF 원시 데이터프레임
+            - RFV: RFV 측정값 (float)
+            - LFV: LFV 측정값 (float)
+            - CON: CON 측정값 (float)
+            - HAR: HAR 측정값 (float)
+        df_standard (pd.DataFrame): UF 표준값 데이터프레임
+            - RFV_STD: RFV 표준값 (float)
+            - LFV_STD: LFV 표준값 (float)
+            - CON_STD: CON 표준값 (float)
+            - HAR_STD: HAR 표준값 (float)
+
+    Returns:
+        go.Figure: UF 개별 항목 히스토그램 (2x2 서브플롯)
+
+    시각화 특징:
+        - 2x2 서브플롯 구성
+        - RFV, LFV: 오렌지색 히스토그램
+        - CON: 음수값을 양수로 변환하여 빨간색 히스토그램
+        - HAR: 오렌지색 히스토그램
+    """
     rfv_std = df_standard["RFV_STD"].values[0]
     lfv_std = df_standard["LFV_STD"].values[0]
     con_std = df_standard["CON_STD"].values[0]
@@ -314,6 +422,26 @@ def draw_barplot_uf_individual(df_raw, df_standard):
 
 # weight
 def draw_weight_distribution(df):
+    """
+    중량 합격률 월별 차트를 생성합니다.
+
+    Args:
+        df (pd.DataFrame): 중량 데이터프레임
+            - INS_DATE_YM: 검사 년월 (str)
+            - WT_INS_QTY: 검사 수량 (int/float)
+            - WT_PASS_QTY: 합격 수량 (int/float)
+            - PASS_PCT: 합격률 (float)
+
+    Returns:
+        go.Figure: 중량 합격률 차트
+
+    시각화 특징:
+        - 그룹 바 차트 (검사 수량, 합격 수량)
+        - 선 그래프 (합격률)
+        - 이중 Y축 사용
+        - 가로 범례 배치
+    """
+    # 검사 수량 바 차트
     trace1 = go.Bar(
         x=df["INS_DATE_YM"],
         y=df["WT_INS_QTY"],
@@ -324,6 +452,7 @@ def draw_weight_distribution(df):
         textposition=None,
         yaxis="y",
     )
+    # 합격 수량 바 차트
     trace2 = go.Bar(
         x=df["INS_DATE_YM"],
         y=df["WT_PASS_QTY"],
@@ -334,6 +463,7 @@ def draw_weight_distribution(df):
         textposition=None,
         yaxis="y",
     )
+    # 합격률 선 그래프 (우측 Y축)
     trace3 = go.Scatter(
         x=df["INS_DATE_YM"],
         y=df["PASS_PCT"],
@@ -373,8 +503,27 @@ def draw_weight_distribution(df):
 
 
 def draw_weight_distribution_individual(df, wt_spec):
+    """
+    개별 중량 분포 박스플롯을 생성합니다.
+
+    Args:
+        df (pd.DataFrame): 중량 개별 데이터프레임
+            - INS_DATE_YM: 검사 년월 (str)
+            - MRM_WGT: 측정 중량 (float)
+        wt_spec (float): 표준 중량값
+
+    Returns:
+        go.Figure: 중량 분포 박스플롯
+
+    시각화 특징:
+        - 월별 박스플롯
+        - 평균값 표시
+        - 아웃라이어 제거된 데이터 사용
+        - 표준 중량값 수평선 표시
+    """
     fig = go.Figure()
 
+    # 박스플롯 생성
     trace = go.Box(
         x=df["INS_DATE_YM"],
         y=df["MRM_WGT"],
@@ -404,9 +553,30 @@ def draw_weight_distribution_individual(df, wt_spec):
 
 
 def draw_rr_trend(rr_raw_df, rr_standard_df):
+    """
+    RR (Reliability) 트렌드 차트를 생성합니다.
+
+    Args:
+        rr_raw_df (pd.DataFrame): RR 원시 데이터프레임
+            - SMPL_DATE: 샘플링 날짜 (datetime)
+            - Result_new: RR 측정값 (float)
+        rr_standard_df (pd.DataFrame): RR 표준값 데이터프레임
+            - SPEC_MAX: 최대 허용값 (float)
+            - SPEC_MIN: 최소 허용값 (float)
+
+    Returns:
+        go.Figure: RR 트렌드 차트
+
+    시각화 특징:
+        - 산점도 형태의 트렌드 차트
+        - 최대/최소 허용값 수평선 표시
+        - Y축 범위는 표준값 기준으로 설정
+    """
+    # 표준값 추출
     spec_max = rr_standard_df["SPEC_MAX"].values[0]
     spec_min = rr_standard_df["SPEC_MIN"].values[0]
 
+    # RR 트렌드 산점도
     trace = go.Scatter(
         x=rr_raw_df["SMPL_DATE"],
         y=rr_raw_df["Result_new"],
@@ -430,12 +600,14 @@ def draw_rr_trend(rr_raw_df, rr_standard_df):
 
     fig = go.Figure([trace], layout)
 
+    # 최대 허용값 수평선 추가
     fig.add_hline(
         y=spec_max,
         line_width=1,
         line_dash="dot",
         line_color=config_plotly.NEGATIVE_CLR,
     )
+    # 최소 허용값이 0이 아닌 경우에만 수평선 추가
     if spec_min != 0:
         fig.add_hline(
             y=spec_min,
@@ -447,10 +619,30 @@ def draw_rr_trend(rr_raw_df, rr_standard_df):
 
 
 def draw_rr_distribution(rr_df, rr_standard_df):
+    """
+    RR (Reliability) 정규분포 차트를 생성합니다.
+
+    Args:
+        rr_df (pd.DataFrame): RR 데이터프레임
+            - Result_new: RR 측정값 (float)
+        rr_standard_df (pd.DataFrame): RR 표준값 데이터프레임
+            - SPEC_MAX: 최대 허용값 (float)
+            - SPEC_MIN: 최소 허용값 (float)
+
+    Returns:
+        go.Figure: RR 정규분포 차트
+
+    시각화 특징:
+        - 정규분포 곡선
+        - 평균값 수직선
+        - 최대/최소 허용값 수직선
+        - 확률밀도 함수 사용
+    """
+    # 표준값 추출
     spec_max = rr_standard_df["SPEC_MAX"].values[0]
     spec_min = rr_standard_df["SPEC_MIN"].values[0]
 
-    # RR 분포
+    # RR 분포 통계 계산
     mean, std = np.mean(rr_df["Result_new"]), np.std(rr_df["Result_new"])
     range_max = max(spec_max + 0.1, rr_df["Result_new"].max())
     range_min = min(
@@ -458,9 +650,11 @@ def draw_rr_distribution(rr_df, rr_standard_df):
         rr_df["Result_new"].min(),
     )
 
+    # 정규분포 곡선 생성
     x = np.linspace(range_min, spec_max, 100)
     y = (1 / (std * np.sqrt(2 * np.pi))) * np.exp(-((x - mean) ** 2) / (2 * std**2))
 
+    # 정규분포 곡선 트레이스
     trace = go.Scatter(
         x=x,
         y=y,
@@ -481,12 +675,15 @@ def draw_rr_distribution(rr_df, rr_standard_df):
 
     fig = go.Figure([trace], layout)
 
+    # 평균값 수직선 추가
     fig.add_vline(x=mean, line=dict(color="red", dash="dash"), annotation_text="Mean")
+    # 최대 허용값 수직선 추가
     fig.add_vline(
         x=spec_max,
         line=dict(color="green", dash="dot"),
         annotation_text="Max",
     )
+    # 최소 허용값이 0이 아닌 경우에만 수직선 추가
     if spec_min != 0:
         fig.add_vline(
             x=spec_min,
@@ -498,6 +695,22 @@ def draw_rr_distribution(rr_df, rr_standard_df):
 
 # CTL
 def draw_ctl_trend(df):
+    """
+    CTL (Control) 합격률 트렌드 차트를 생성합니다.
+
+    Args:
+        df (pd.DataFrame): CTL 트렌드 데이터프레임
+            - MRM_DATE: 측정 날짜 (str)
+            - ctl_pass_rate: CTL 합격률 (float)
+
+    Returns:
+        go.Figure: CTL 합격률 트렌드 차트
+
+    시각화 특징:
+        - 바 차트 형태의 트렌드
+        - Y축 범위는 0~110% (1.1)
+        - 퍼센트 형식으로 표시
+    """
     trace = go.Bar(
         x=df["MRM_DATE"],
         y=df["ctl_pass_rate"],
@@ -516,7 +729,24 @@ def draw_ctl_trend(df):
 
 
 def draw_ctl_detail(df):
+    """
+    CTL (Control) 상세 분석 차트를 생성합니다.
+
+    Args:
+        df (pd.DataFrame): CTL 상세 데이터프레임
+            - MRM_ITEM: 측정 항목 (str)
+            - 기타 측정값 컬럼들
+
+    Returns:
+        go.Figure: CTL 상세 분석 차트 (4x4 서브플롯)
+
+    시각화 특징:
+        - 4x4 서브플롯 구성
+        - 16개 측정 항목별 개별 차트
+        - 각 항목별 상세 분석 결과 표시
+    """
     rows, cols = 4, 4
+    # CTL 측정 항목 리스트
     CTMS_MRM_ITEM = (
         "BS.12",
         "ILG",
@@ -535,6 +765,8 @@ def draw_ctl_detail(df):
         "I/P",
         "TShG.C+y",
     )
+
+    # 4x4 서브플롯 생성
     fig = make_subplots(
         rows=rows,
         cols=cols,
@@ -542,14 +774,19 @@ def draw_ctl_detail(df):
         shared_xaxes=True,
     )
 
+    # 각 측정 항목별로 서브플롯에 차트 추가
     for idx, item in enumerate(CTMS_MRM_ITEM[: rows * cols]):
         row = (idx // cols) + 1
         col = (idx % cols) + 1
 
+        # 해당 항목의 데이터 필터링
         subset = df[df["MRM_ITEM"] == item]
 
+        # UPPER와 LOWER 데이터 분리
         UPPER = subset[subset["SIDE"] == "UPPER"]
         LOWER = subset[subset["SIDE"] == "LOWER"]
+
+        # UPPER 측정값 산점도 추가
         fig.add_trace(
             go.Scatter(
                 x=UPPER["MRM_DATE"],
@@ -558,12 +795,14 @@ def draw_ctl_detail(df):
                 mode="markers",
                 marker=dict(color=config_plotly.multi_color_lst[0]),
                 name="UPPER",
-                showlegend=(idx == 0),
+                showlegend=(idx == 0),  # 첫 번째 서브플롯에서만 범례 표시
                 legendgroup="UPPER",
             ),
             row=row,
             col=col,
         )
+
+        # LOWER 측정값 산점도 추가
         fig.add_trace(
             go.Scatter(
                 x=LOWER["MRM_DATE"],
@@ -571,13 +810,15 @@ def draw_ctl_detail(df):
                 text=LOWER["ACTUAL"],
                 mode="markers",
                 marker=dict(color=config_plotly.multi_color_lst[1]),
-                showlegend=(idx == 0),
+                showlegend=(idx == 0),  # 첫 번째 서브플롯에서만 범례 표시
                 name="LOWER",
                 legendgroup="LOWER",
             ),
             row=row,
             col=col,
         )
+
+        # UPPER 허용 한계선 추가 (존재하는 경우)
         if "UL" in UPPER.columns and not pd.isna(UPPER["UL"].values[0]):
             fig.add_hline(
                 y=UPPER["UL"].values[0],
@@ -585,6 +826,7 @@ def draw_ctl_detail(df):
                 row=row,
                 col=col,
             )
+        # LOWER 허용 한계선 추가 (존재하는 경우)
         if "LL" in UPPER.columns and not pd.isna(UPPER["LL"].values[0]):
             fig.add_hline(
                 y=UPPER["LL"].values[0],
@@ -593,11 +835,14 @@ def draw_ctl_detail(df):
                 col=col,
             )
 
+    # 전체 레이아웃 설정
     fig.update_layout(
         title="CTL Trend",
         height=500,
         legend=dict(orientation="h", y=1.1, yanchor="bottom", x=1, xanchor="right"),
     )
+    # X축을 카테고리 타입으로 설정
     fig.update_xaxes(type="category")
+    # Y축 그리드 제거
     fig.update_yaxes(showgrid=False)
     return fig

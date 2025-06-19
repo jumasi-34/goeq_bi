@@ -24,6 +24,7 @@ from _01_query.GMES.q_ctl import get_ctl_raw_query
 from _01_query.helper_sql import format_date_to_yyyymmdd
 from _02_preprocessing.GMES.df_rr import get_rr_df, get_rr_oe_list_df
 from _02_preprocessing.GMES.df_uf import calculate_uf_pass_rate
+from _02_preprocessing.GMES.df_ctl import get_groupby_mcode_ctl_df
 
 # 대량 평가 결과 테이블의 스키마 정의
 MASS_ASSESS_RESULT_SCHEMA = [
@@ -138,12 +139,13 @@ def collect_ncf_data(mcode: str, date_range: DateRange) -> pd.DataFrame:
         mcode (str): 제품 코드
         date_range (DateRange): 날짜 범위
 
-    Returns:
-        pd.DataFrame: 집계된 NCF 데이터
+    Returns
+    -------
+    pd.DataFrame: 집계된 NCF 데이터
     """
     ncf_df = get_client("snowflake").execute(
         ncf_daily(
-            mcode_list=[mcode],
+            mcode=mcode,
             start_date=date_range.formatted_start,
             end_date=date_range.formatted_end,
         )
@@ -151,29 +153,6 @@ def collect_ncf_data(mcode: str, date_range: DateRange) -> pd.DataFrame:
     # 컬럼명을 소문자로 변환
     ncf_df.columns = ncf_df.columns.str.lower()
     return ncf_df.groupby(["m_code"]).agg(ncf_qty=("dft_qty", "sum")).reset_index()
-
-
-def process_ctl_data(ctl_df: pd.DataFrame) -> pd.DataFrame:
-    """
-    CTL 데이터를 처리하여 합격률을 계산합니다.
-
-    Args:
-        ctl_df (pd.DataFrame): CTL 원본 데이터
-
-    Returns:
-        pd.DataFrame: 합격률이 계산된 CTL 데이터
-    """
-    ctl_df = ctl_df.groupby(["m_code", "jdg"]).size().reset_index(name="count")
-    ctl_pivot = ctl_df.pivot(index="m_code", columns="jdg", values="count").fillna(0)
-
-    if "OK" in ctl_pivot.columns and "NI" in ctl_pivot.columns:
-        ctl_pivot["ctl_pass_rate"] = ctl_pivot["OK"] / (
-            ctl_pivot["NI"] + ctl_pivot["OK"]
-        )
-    else:
-        ctl_pivot["ctl_pass_rate"] = 0
-
-    return ctl_pivot.reset_index()
 
 
 def merge_all_data(
@@ -293,16 +272,13 @@ def process_single_mcode(row: pd.Series) -> pd.DataFrame:
         rr_df = calculate_pass_rate_with_pdf(rr_df)
 
         # CTL 데이터 처리
-        ctl_df = get_client("snowflake").execute(
-            get_ctl_raw_query(
-                start_date=date_range.formatted_start,
-                end_date=date_range.formatted_end,
-                mcode=mcode,
-            )
+        ctl_df = get_groupby_mcode_ctl_df(
+            mcode=mcode,
+            start_date=date_range.formatted_start,
+            end_date=date_range.formatted_end,
         )
         # CTL 데이터 컬럼명 소문자로 변환
         ctl_df.columns = ctl_df.columns.str.lower()
-        ctl_df = process_ctl_data(ctl_df)
 
         # 데이터 병합
         result_df = merge_all_data(prdt_df, ncf_df, uf_df, gt_wt_df, rr_df, ctl_df)
