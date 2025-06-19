@@ -60,7 +60,7 @@ CTE_MES_PRODUCTION_DAILY = """--sql
 
 
 def curing_prdt_daily(
-    mcode_list: Optional[List[str]] = None,
+    mcode_list=None,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
 ) -> str:
@@ -70,7 +70,7 @@ def curing_prdt_daily(
 
     Parameters
     ----------
-    mcode_list : Optional[List[str]], optional
+    mcode_list : optional
         조회할 제품 코드 리스트. 기본값은 None
     start_date : Optional[str], optional
         조회 시작일자 (YYYYMMDD 형식). 기본값은 None

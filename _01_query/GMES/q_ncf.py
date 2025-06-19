@@ -177,7 +177,7 @@ def ncf_monthly(
 
 
 def ncf_daily(
-    mcode_list: Optional[List[str]] = None,
+    mcode: Optional[str] = None,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     ncf_list: Optional[List[str]] = None,
@@ -190,8 +190,8 @@ def ncf_daily(
 
     Parameters
     ----------
-    mcode_list : Optional[List[str]], optional
-        조회할 제품 코드 리스트. 기본값은 None
+    mcode : Optional[str], optional
+        조회할 제품 코드. 기본값은 None
     start_date : Optional[str], optional
         조회 시작일자 (YYYYMMDD 형식). 기본값은 None
     end_date : Optional[str], optional
@@ -207,9 +207,8 @@ def ncf_daily(
     # WHERE 절 조건을 동적으로 생성
     where_conditions = []
 
-    if mcode_list:
-        mcode_str = ", ".join(f"'{m}'" for m in mcode_list)
-        where_conditions.append(f"MAS.M_CODE IN ({mcode_str})")
+    if mcode:
+        where_conditions.append(f"MAS.M_CODE = '{mcode}'")
 
     if ncf_list:
         ncf_str = ", ".join(f"'{n}'" for n in ncf_list)

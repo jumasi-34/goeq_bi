@@ -38,7 +38,7 @@ MAX_LOGIN_ATTEMPTS = int(os.getenv("MAX_LOGIN_ATTEMPTS", "3"))
 ROLES = ["Viewer", "Contributor", "Admin"]
 
 # 고정 비밀번호 설정
-FIXED_PASSWORDS = {"Contributor": "January", "Admin": "December"}
+FIXED_PASSWORDS = {"Contributor": "December", "Admin": "131209"}
 
 from _00_database.db_client import get_client
 from _01_query.SAP.q_hk_personnel import CTE_HR_PERSONAL

@@ -210,3 +210,43 @@ def get_ncf_detail_by_plant(yyyy: int, plant: str) -> pd.DataFrame:
     df = df.groupby("DFT_CD", as_index=False)["NCF_QTY"].sum()
     df = df.sort_values(by="NCF_QTY", ascending=False)
     return df
+
+
+@st.cache_data(ttl=600)
+def get_ncf_monthly_df(mcode: str, start_date: str, end_date: str) -> pd.DataFrame:
+    """ """
+    df = get_client("snowflake").execute(
+        q_ncf.ncf_daily(mcode=mcode, start_date=start_date, end_date=end_date)
+    )
+    df.columns = df.columns.str.upper()
+    df["INS_DATE"] = pd.to_datetime(df["INS_DATE"], format="%Y%m%d").dt.strftime(
+        "%Y-%m-%d"
+    )
+    df["YYYYMM"] = pd.to_datetime(df["INS_DATE"]).dt.strftime("%Y-%m")
+    df = df.groupby(["PLANT", "M_CODE", "SPEC_CD", "STXC", "YYYYMM"], as_index=False)[
+        "DFT_QTY"
+    ].sum()
+    df = df.sort_values(by=["YYYYMM", "PLANT"])
+    df = df.assign(
+        PLANT=pd.Categorical(df["PLANT"], categories=config.plant_codes, ordered=True)
+    ).sort_values(by=["YYYYMM", "PLANT"])
+    return df
+
+
+@st.cache_data(ttl=600)
+def get_ncf_by_dft_cd(mcode: str, start_date: str, end_date: str) -> pd.DataFrame:
+    """ """
+    df = get_client("snowflake").execute(
+        q_ncf.ncf_daily(mcode=mcode, start_date=start_date, end_date=end_date)
+    )
+    df.columns = df.columns.str.upper()
+    df["INS_DATE"] = pd.to_datetime(df["INS_DATE"], format="%Y%m%d").dt.strftime(
+        "%Y-%m-%d"
+    )
+    df["YYYYMM"] = pd.to_datetime(df["INS_DATE"]).dt.strftime("%Y-%m")
+    df = df.groupby(["PLANT", "M_CODE", "SPEC_CD", "STXC", "DFT_CD"], as_index=False)[
+        "DFT_QTY"
+    ].sum()
+    df = df.sort_values(by=["DFT_QTY"], ascending=False).reset_index(drop=True)
+    df["CUM_PCT"] = df["DFT_QTY"].cumsum() / df["DFT_QTY"].sum()
+    return df

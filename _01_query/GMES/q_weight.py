@@ -111,6 +111,101 @@ def gt_wt_assess(
         raise
 
 
+def gt_wt_gruopby_ym(
+    mcode: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+) -> str:
+    """
+    중량 테스트 개별 데이터를 조회하는 SQL 쿼리를 생성합니다.
+
+    Parameters
+    ----------
+    mcode : Optional[str], optional
+        조회할 제품 코드. 기본값은 None
+    start_date : Optional[str], optional
+        조회 시작일자 (YYYYMMDD 형식). 기본값은 None
+    end_date : Optional[str], optional
+        조회 종료일자 (YYYYMMDD 형식). 기본값은 None
+
+    Returns
+    -------
+    str
+        CTE를 포함한 SQL 쿼리 문자열을 반환합니다.
+    """
+    query = f"""--sql
+    WITH 
+        MAS AS ({CTE_MES_MASTER_HX}),
+        WT AS ({CTE_MES_GT_WT})
+    SELECT
+        MAS.PLANT,
+        MAS.M_CODE,
+        MAS.SPEC_CD_HX,
+        TO_CHAR(TO_DATE(SUBSTRING(WT.INS_DATE, 0, 8), 'YYYYMMDD'), 'YYYYMM') AS INS_DATE_YM,
+        COUNT(WT.JDG) AS WT_INS_QTY,
+        SUM(WT.JDG) AS WT_PASS_QTY
+    FROM MAS
+    LEFT JOIN WT
+        ON MAS.SPEC_CD_HX = WT.SPEC_CD 
+            AND MAS.PLANT = WT.PLANT
+    WHERE 
+        1=1
+        {f"AND WT.INS_DATE >= '{start_date}'" if start_date else ""}
+        {f"AND WT.INS_DATE <= '{end_date}'" if end_date else ""}
+        {f"AND MAS.M_CODE = '{mcode}'" if mcode else ""}
+    GROUP BY
+        MAS.PLANT,
+        MAS.M_CODE,
+        MAS.SPEC_CD_HX,
+        TO_CHAR(TO_DATE(SUBSTRING(WT.INS_DATE, 0, 8), 'YYYYMMDD'), 'YYYYMM')
+    ORDER BY
+        INS_DATE_YM
+    """
+    return query
+
+
+def gt_wt_individual(
+    mcode: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+) -> str:
+    """
+    중량 테스트 개별 데이터를 조회하는 SQL 쿼리를 생성합니다.
+
+    Parameters
+    ----------
+    mcode : Optional[str], optional
+        조회할 제품 코드. 기본값은 None
+    start_date : Optional[str], optional
+        조회 시작일자 (YYYYMMDD 형식). 기본값은 None
+    end_date : Optional[str], optional
+        조회 종료일자 (YYYYMMDD 형식). 기본값은 None
+    """
+    query = f"""--sql
+    WITH 
+        MAS AS ({CTE_MES_MASTER_HX}),
+        WT AS ({CTE_MES_GT_WT})
+    SELECT
+        MAS.PLANT,
+        MAS.M_CODE,
+        MAS.SPEC_CD_HX,
+        WT.INS_DATE,
+        WT.STD_WGT,
+        WT.MRM_WGT,
+        WT.JDG
+    FROM MAS
+    LEFT JOIN WT
+        ON MAS.SPEC_CD_HX = WT.SPEC_CD 
+            AND MAS.PLANT = WT.PLANT
+    WHERE 
+        1=1
+        {f"AND WT.INS_DATE >= '{start_date}'" if start_date else ""}
+        {f"AND WT.INS_DATE <= '{end_date}'" if end_date else ""}
+        {f"AND MAS.M_CODE = '{mcode}'" if mcode else ""}
+    """
+    return query
+
+
 def main() -> pd.DataFrame:
     """
     중량 테스트 데이터의 합격률을 계산하는 메인 함수입니다.
