@@ -51,6 +51,14 @@ GRAY_CLR, color_Gray_RGBA = "#9a9b9c", "rgba(154, 155, 156, 0.6)"
 LIGHT_GRAY_CLR, color_LightGray_RGBA = "#ededed", "rgba(237, 237, 237, 0.6)"
 DARK_GRAY_CLR, color_DarkGray_RGBA = "#575756", "rgba(87, 87, 86, 0.6)"
 ORANGE_CLR, color_Orange_RGBA = "#ec6608", "rgba(236, 102, 8, 0.6)"
+
+# Gantt 차트용 색상 상수
+RED_CLR = "#E31C12"
+BLUE_CLR = "#0078FF"
+GREEN_CLR = "#348C57"
+PURPLE_CLR = "#8B5CF6"
+YELLOW_CLR = "#F5BF1E"
+
 multi_color_lst = [
     "#EC6608",
     "#F5BF1E",

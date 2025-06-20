@@ -123,6 +123,12 @@ PAGE_CONFIGS = {
         "category": "Admin",
         "roles": ["Admin"],
     },
+    "Product History": {
+        "filename": "_04_pages/_08_ADMIN/ui_product_history.py",
+        "icon": ":material/query_stats:",
+        "category": "Admin",
+        "roles": ["Contributor", "Admin"],
+    },
     # System
     "Navigation": {
         "filename": "_04_pages/_09_SYSTEM/ui_navigation.py",

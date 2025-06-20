@@ -62,13 +62,18 @@ def remove_outliers(group):
 # 메인 페이지 UI 구성
 # =============================================================================
 
-main_tab = st.tabs(["Overview", "Detail", "Setting"])
+main_tab = st.tabs(["Overview", "Detail", "Description"])
+
+# SQLite 데이터베이스에서 Assessment 결과 데이터 로드
+result_df = get_client("sqlite").execute("SELECT * FROM mass_assess_result")
 with main_tab[0]:
+    st.dataframe(result_df, use_container_width=True, hide_index=True)
+    st.subheader("대상 규격 수")
+    st.write(f"대상 규격 수: {len(result_df)}")
+
+with main_tab[1]:
     # 페이지 제목 설정
     st.title("OE Assessment Result Viewer")
-
-    # SQLite 데이터베이스에서 Assessment 결과 데이터 로드
-    result_df = get_client("sqlite").execute("SELECT * FROM mass_assess_result")
 
     # Assessment 결과 섹션 제목
     st.subheader("Assessment Result")
@@ -296,7 +301,7 @@ with main_tab[0]:
         )
 
 
-with main_tab[1]:
+with main_tab[2]:
     st.title("Detail")
 
     # product_assessment.md 파일을 직접 읽어서 마크다운으로 표시
@@ -308,7 +313,3 @@ with main_tab[1]:
         st.error("product_assessment.md 파일을 찾을 수 없습니다.")
     except Exception as e:
         st.error(f"파일을 읽는 중 오류가 발생했습니다: {str(e)}")
-
-
-with main_tab[2]:
-    st.write("TEST")
