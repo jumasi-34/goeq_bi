@@ -72,6 +72,12 @@ PAGE_CONFIGS = {
         "roles": ["Viewer", "Contributor", "Admin"],
     },
     # User Guide
+    "CQMS User Guide": {
+        "filename": "_04_pages/_05_USER_GUIDE/ui_cqms_userguide.py",
+        "icon": ":material/bar_chart:",
+        "category": "User Guide",
+        "roles": ["Admin"],
+    },
     "Plotly Guide": {
         "filename": "_04_pages/_05_USER_GUIDE/plotly_guide.py",
         "icon": ":material/bar_chart:",

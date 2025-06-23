@@ -18,13 +18,10 @@ CQMS 이벤트, OE 애플리케이션, HGWS, 생산 데이터, 품질 지표 등
 import streamlit as st
 from datetime import datetime, timedelta
 import importlib
-import plotly.graph_objects as go
-import pandas as pd
 
-from _00_database.db_client import get_client
-from _01_query.HOPE import q_hope
-from _01_query.CQMS import q_quality_issue, q_4m_change, q_customer_audit
-from _01_query.HGWS import q_hgws
+from _02_preprocessing.CQMS import df_cqms_unified
+from _02_preprocessing.HOPE import df_sellin, df_oeapp
+from _02_preprocessing.HGWS import df_hgws
 from _02_preprocessing.GMES import (
     df_production,
     df_ncf,
@@ -37,7 +34,6 @@ from _03_visualization._08_ADMIN import (
     viz_oeassessment_result_viewer,
     viz_product_history,
 )
-from _03_visualization import config_plotly
 from _05_commons import config
 
 
@@ -50,8 +46,8 @@ def load_search_interface():
     """
     # 개발 모드에서 모듈 리로드
     if config.DEV_MODE:
-        importlib.reload(q_hope)
-        importlib.reload(q_hgws)
+        importlib.reload(df_sellin)
+        importlib.reload(df_hgws)
 
     # 기본 날짜 범위 설정 (1년 전 ~ 오늘)
     lastyear_first_day = datetime.now() - timedelta(days=365)
@@ -74,70 +70,23 @@ def load_search_interface():
             end_date = end_col.date_input("End Date", value=today)
             start_date = datetime.combine(start_date, datetime.min.time())
             end_date = datetime.combine(end_date, datetime.min.time())
+            start_date_YYYYMMDD = start_date.strftime("%Y%m%d")
+            end_date_YYYYMMDD = end_date.strftime("%Y%m%d")
 
             btn_individual = st.form_submit_button("Run")
             if btn_individual:
                 if selected_mcode and start_date and end_date:
-                    return selected_mcode, start_date, end_date
+                    return (
+                        selected_mcode,
+                        start_date,
+                        end_date,
+                        start_date_YYYYMMDD,
+                        end_date_YYYYMMDD,
+                    )
                 else:
                     st.warning("Please enter valid information in all fields.")
                     return None
     return None
-
-
-def load_cqms_data(m_code):
-    """
-    CQMS 데이터를 로드하고 전처리합니다.
-
-    Args:
-        m_code (str): 조회할 M-Code
-
-    Returns:
-        pd.DataFrame: 전처리된 CQMS 데이터
-    """
-    # Quality Issue 데이터 로드 및 전처리
-    q_issue = get_client("snowflake").execute(q_quality_issue.query_quality_issue())
-    q_issue.columns = q_issue.columns.str.upper()
-    q_issue = q_issue[q_issue["M_CODE"] == m_code]
-    q_issue["SUBJECT"] = (
-        q_issue["TYPE"] + " - " + q_issue["CAT"] + " - " + q_issue["SUB_CAT"]
-    )
-    q_issue["CATEGORY"] = "Quality Issue"
-    q_issue = q_issue[["CATEGORY", "SUBJECT", "REG_DATE", "SEQ"]]
-    q_issue = q_issue.rename(columns={"SEQ": "URL"})
-
-    # 4M Change 데이터 로드 및 전처리
-    chg_4m = get_client("snowflake").execute(q_4m_change.query_4m_change())
-    chg_4m.columns = chg_4m.columns.str.upper()
-    chg_4m = chg_4m[chg_4m["M_CODE"] == m_code]
-    chg_4m["CATEGORY"] = "4M Change"
-    chg_4m = chg_4m[["CATEGORY", "SUBJECT", "REG_DATE", "URL"]]
-
-    # Customer Audit 데이터 로드 및 전처리
-    audit = get_client("snowflake").execute(q_customer_audit.query_customer_audit())
-    audit.columns = audit.columns.str.upper()
-    audit = audit[audit["M_CODE"] == m_code]
-    audit["CATEGORY"] = "Audit"
-    audit = audit[["CATEGORY", "SUBJECT", "START_DT", "URL"]]
-    audit = audit.rename(columns={"START_DT": "REG_DATE"})
-
-    # 데이터 통합 및 전처리
-    cqms_data = pd.concat([q_issue, chg_4m, audit])
-
-    # REG_DATE 컬럼이 datetime 타입인지 확인하고 변환
-    if not pd.api.types.is_datetime64_any_dtype(cqms_data["REG_DATE"]):
-        cqms_data["REG_DATE"] = pd.to_datetime(cqms_data["REG_DATE"], errors="coerce")
-
-    # 날짜 형식 변환 및 정렬
-    cqms_data["REG_DATE"] = cqms_data["REG_DATE"].dt.strftime("%Y-%m-%d")
-    cqms_data = cqms_data.sort_values(by="REG_DATE", ascending=False)
-    cqms_data["CATEGORY"] = pd.Categorical(
-        cqms_data["CATEGORY"],
-        categories=["Quality Issue", "4M Change", "Audit"],
-        ordered=True,
-    )
-
-    return cqms_data
 
 
 def display_cqms_metrics(cqms_data):
@@ -247,8 +196,7 @@ def display_oe_application(m_code):
         m_code (str): 조회할 M-Code
     """
     # OE 애플리케이션 데이터 로드
-    oe_app = get_client("snowflake").execute(q_hope.oe_app(m_code))
-    oe_app.columns = oe_app.columns.str.upper()
+    oe_app = df_oeapp.load_oeapp_df_by_mcode(m_code)
 
     st.subheader("OE Application")
     column_config = {
@@ -266,7 +214,7 @@ def display_oe_application(m_code):
     )
 
 
-def display_sellin_data(m_code):
+def display_sellin_data(m_code, start_date, end_date):
     """
     Sellin 데이터를 로드하고 시각화합니다.
 
@@ -274,16 +222,11 @@ def display_sellin_data(m_code):
         m_code (str): 조회할 M-Code
     """
     # Sellin 데이터 쿼리 및 전처리
-    query = f"""
-    SELECT * FROM sellin_monthly_agg WHERE M_CODE = '{m_code}'
-    """
-    test = get_client("sqlite").execute(query)
-    test = test.sort_values(by=["YYYY", "MM"]).reset_index(drop=True)
-    test["YYYY_MM"] = (
-        test["YYYY"].astype(str) + "-" + test["MM"].astype(str).str.zfill(2)
-    )
+    df_sellin_by_mcode = df_sellin.get_sellin_df(m_code, start_date, end_date)
 
-    st.plotly_chart(viz_product_history.draw_area_chart_sellin_by_mcode(test))
+    st.plotly_chart(
+        viz_product_history.draw_area_chart_sellin_by_mcode(df_sellin_by_mcode)
+    )
 
 
 def display_hgws_data(m_code, start_date, end_date):
@@ -296,19 +239,13 @@ def display_hgws_data(m_code, start_date, end_date):
         end_date (str): 종료 날짜
     """
     # HGWS 데이터 로드 및 전처리
-    hgws = get_client("snowflake").execute(
-        q_hgws.query_return_individual(
-            mcode=m_code, start_date=start_date, end_date=end_date
-        )
-    )
-    hgws.columns = hgws.columns.str.upper()
-    hgws = hgws.sort_values(by="RETURN CNT", ascending=False)
+    hgws = df_hgws.get_hgws_df(m_code, start_date, end_date)
 
     st.subheader("HGWS")
     st.plotly_chart(viz_product_history.draw_barplot_hgws_by_mcode(hgws))
 
 
-def display_production_data(m_code, start_date, end_date):
+def display_production_data(m_code, start_date_YYYYMMDD, end_date_YYYYMMDD):
     """
     생산 데이터를 로드하고 시각화합니다.
 
@@ -319,7 +256,9 @@ def display_production_data(m_code, start_date, end_date):
     """
     # 생산 데이터 로드
     df_production_data = df_production.get_daily_production_df(
-        start_date=start_date, end_date=end_date, mcode=m_code
+        mcode=m_code,
+        start_date=start_date_YYYYMMDD,
+        end_date=end_date_YYYYMMDD,
     )
 
     st.subheader("Production")
@@ -328,7 +267,7 @@ def display_production_data(m_code, start_date, end_date):
     )
 
 
-def display_ncf_data(m_code, start_date, end_date):
+def display_ncf_data(m_code, start_date_YYYYMMDD, end_date_YYYYMMDD):
     """
     NCF 데이터를 로드하고 시각화합니다.
 
@@ -339,15 +278,13 @@ def display_ncf_data(m_code, start_date, end_date):
     """
     # NCF 월별 데이터
     groupby_ncf_monthly = df_ncf.get_ncf_monthly_df(
-        start_date=start_date, end_date=end_date, mcode=m_code
+        start_date=start_date_YYYYMMDD, end_date=end_date_YYYYMMDD, mcode=m_code
     )
 
     # NCF DFT 코드별 데이터
     groupby_dft_cd = df_ncf.get_ncf_by_dft_cd(
-        start_date=start_date, end_date=end_date, mcode=m_code
+        start_date=start_date_YYYYMMDD, end_date=end_date_YYYYMMDD, mcode=m_code
     )
-    groupby_dft_cd = groupby_dft_cd.sort_values(by="DFT_QTY", ascending=False)
-    groupby_dft_cd = groupby_dft_cd.reset_index(drop=True)
 
     st.subheader("NCF")
     ncf_col = st.columns(2)
@@ -452,56 +389,67 @@ def display_uniformity_data(m_code, start_date, end_date):
     st.plotly_chart(viz_oeassessment_result_viewer.draw_barplot_uf(uf_df))
 
 
+st.markdown(
+    """
+    - CQMS 세부 데이터에 대해 Link 추가 필요
+    - 조회 기간 연동 필요
+    - 레이아웃 수정 필요
+    - Run 수행시 작동하도록 수정 필요
+    """,
+    unsafe_allow_html=True,
+)
+
 # 검색 인터페이스 로드
 search_result = load_search_interface()
 
-# 하드코딩된 테스트 데이터 (실제 운영 시 제거 필요)
-# m_code = "1024247"
-# start_date = "2022-01-01"
-# end_date = "2025-05-19"
-
-# 검색 결과가 있으면 사용, 없으면 기본값 사용
+# 검색 결과가 있을 때만 분석 수행
 if search_result:
-    m_code, start_date, end_date = search_result
+    m_code, start_date, end_date, start_date_YYYYMMDD, end_date_YYYYMMDD = search_result
     start_date = start_date.strftime("%Y-%m-%d")
     end_date = end_date.strftime("%Y-%m-%d")
 
-# CQMS 데이터 로드 및 표시
-cqms_data = load_cqms_data(m_code)
+    # CQMS 데이터 로드 및 표시
+    cqms_data = df_cqms_unified.get_cqms_unified_df(m_code)
 
-# CQMS 메트릭 표시
-display_cqms_metrics(cqms_data)
+    # CQMS 메트릭 표시
+    display_cqms_metrics(cqms_data)
 
-# CQMS 차트 표시
-display_cqms_charts(cqms_data)
+    # CQMS 차트 표시
+    display_cqms_charts(cqms_data)
 
-# CQMS 데이터 테이블 표시
-with st.expander("CQMS Events Data(Table)"):
-    st.dataframe(cqms_data, use_container_width=True, hide_index=True)
+    # CQMS 데이터 테이블 표시
+    with st.expander("CQMS Events Data(Table)"):
+        st.dataframe(cqms_data, use_container_width=True, hide_index=True)
 
-# OE 애플리케이션 정보 표시
-display_oe_application(m_code)
+    # OE 애플리케이션 정보 표시
+    display_oe_application(m_code)
 
-# Sellin 데이터 표시
-display_sellin_data(m_code)
+    # Sellin 데이터 표시
+    display_sellin_data(m_code, start_date, end_date)
 
-# HGWS 데이터 표시
-display_hgws_data(m_code, start_date, end_date)
+    # HGWS 데이터 표시
+    display_hgws_data(m_code, start_date, end_date)
 
-# 생산 데이터 표시
-display_production_data(m_code, start_date, end_date)
+    # 생산 데이터 표시
+    display_production_data(m_code, start_date_YYYYMMDD, end_date_YYYYMMDD)
 
-# NCF 데이터 표시
-display_ncf_data(m_code, start_date, end_date)
+    # NCF 데이터 표시
+    display_ncf_data(m_code, start_date_YYYYMMDD, end_date_YYYYMMDD)
 
-# RR 데이터 표시
-display_rr_data(m_code, start_date, end_date)
+    # RR 데이터 표시
+    display_rr_data(m_code, start_date, end_date)
 
-# Weight 데이터 표시
-display_weight_data(m_code, start_date, end_date)
+    # Weight 데이터 표시
+    display_weight_data(m_code, start_date, end_date)
 
-# CTL 데이터 표시
-display_ctl_data(m_code, start_date, end_date)
+    # CTL 데이터 표시
+    display_ctl_data(m_code, start_date_YYYYMMDD, end_date_YYYYMMDD)
 
-# Uniformity 데이터 표시
-display_uniformity_data(m_code, start_date, end_date)
+    # Uniformity 데이터 표시
+    display_uniformity_data(m_code, start_date_YYYYMMDD, end_date_YYYYMMDD)
+
+else:
+    # 검색 결과가 없을 때 안내 메시지 표시
+    st.info(
+        "Please enter search criteria and click 'Run' to view product history analysis."
+    )

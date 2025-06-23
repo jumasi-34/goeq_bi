@@ -25,6 +25,13 @@ def load_oeapp_df():
     return df
 
 
+def load_oeapp_df_by_mcode(m_code):
+    df = get_client("snowflake").execute(q_hope.CTE_HOPE_OE_APP_ALL)
+    df.columns = df.columns.str.upper()
+    df = df[df["M_CODE"] == m_code]
+    return df
+
+
 def oe_sku():
     df = load_oeapp_df()
     df = df[df["Status"] == "Supplying"][["plant", "m_code"]]

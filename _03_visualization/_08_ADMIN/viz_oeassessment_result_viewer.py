@@ -716,6 +716,7 @@ def draw_ctl_trend(df):
         y=df["ctl_pass_rate"],
         text=df["ctl_pass_rate"],
         texttemplate="%{text:.1%}",
+        marker=dict(color=config_plotly.ORANGE_CLR),
     )
 
     layout = go.Layout(
