@@ -10,6 +10,7 @@ def get_groupby_weight_ym_df(
     df = get_client("snowflake").execute(query)
     df.columns = df.columns.str.upper()
     df["PASS_PCT"] = df["WT_PASS_QTY"] / df["WT_INS_QTY"]
+    df["INS_DATE_YM"] = df["INS_DATE_YM"].str[:4] + "-" + df["INS_DATE_YM"].str[4:6]
     return df
 
 
