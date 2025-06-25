@@ -44,7 +44,19 @@ PAGE_CONFIGS = {
         "category": "Dashboard",
         "roles": ["Viewer", "Contributor", "Admin"],
     },
+    "Product Assessment Result(OE)": {
+        "filename": "_04_pages/_08_ADMIN/ui_oeassessment_result_viewer.py",
+        "icon": ":material/assessment:",
+        "category": "Dashboard",
+        "roles": ["Contributor", "Admin"],
+    },
     # Analysis
+    "Product History": {
+        "filename": "_04_pages/_08_ADMIN/ui_product_history.py",
+        "icon": ":material/query_stats:",
+        "category": "Analysis",
+        "roles": ["Contributor", "Admin"],
+    },
     "RR Analysis": {
         "filename": "_04_pages/_02_ANALYSIS/ui_rr_analysis.py",
         "icon": ":material/query_stats:",
@@ -99,12 +111,6 @@ PAGE_CONFIGS = {
         "roles": ["Contributor", "Admin"],
     },
     # Admin
-    "Product Assessment Result(OE)": {
-        "filename": "_04_pages/_08_ADMIN/ui_oeassessment_result_viewer.py",
-        "icon": ":material/assessment:",
-        "category": "Admin",
-        "roles": ["Contributor", "Admin"],
-    },
     "Database Explorer": {
         "filename": "_04_pages/_08_ADMIN/ui_db_explorer.py",
         "icon": ":material/database:",
@@ -128,12 +134,6 @@ PAGE_CONFIGS = {
         "icon": ":material/query_stats:",
         "category": "Admin",
         "roles": ["Admin"],
-    },
-    "Product History": {
-        "filename": "_04_pages/_08_ADMIN/ui_product_history.py",
-        "icon": ":material/query_stats:",
-        "category": "Admin",
-        "roles": ["Contributor", "Admin"],
     },
     # System
     "Navigation": {

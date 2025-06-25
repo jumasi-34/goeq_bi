@@ -53,27 +53,25 @@ def load_search_interface():
     lastyear_first_day = datetime.now() - timedelta(days=365)
     today = datetime.now()
 
-    st.subheader("Search")
-    with st.container():
-        with st.form("Individual Search"):
-            mcode_col, start_col, end_col = st.columns(3)
-
+    with st.sidebar:
+        st.subheader("Search")
+        with st.form("Individual Search", border=False):
             # M-Code 입력 필드
-            selected_mcode = mcode_col.text_input(
+            selected_mcode = st.text_input(
                 "Input M - Code",
                 placeholder="7 - digits",
                 help="Enter a valid 7-digit M-Code supplied by the OE",
             )
 
             # 날짜 범위 선택
-            start_date = start_col.date_input("Start Date", value=lastyear_first_day)
-            end_date = end_col.date_input("End Date", value=today)
+            start_date = st.date_input("Start Date", value=lastyear_first_day)
+            end_date = st.date_input("End Date", value=today)
             start_date = datetime.combine(start_date, datetime.min.time())
             end_date = datetime.combine(end_date, datetime.min.time())
             start_date_YYYYMMDD = start_date.strftime("%Y%m%d")
             end_date_YYYYMMDD = end_date.strftime("%Y%m%d")
 
-            btn_individual = st.form_submit_button("Run")
+            btn_individual = st.form_submit_button("Run", type="primary")
             if btn_individual:
                 if selected_mcode and start_date and end_date:
                     return (
@@ -86,7 +84,7 @@ def load_search_interface():
                 else:
                     st.warning("Please enter valid information in all fields.")
                     return None
-    return None
+        return None
 
 
 def display_cqms_metrics(cqms_data):

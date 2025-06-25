@@ -264,9 +264,6 @@ COMMON_COLUMNS = {
 
 def render_plant_tab(data, selected_year):
     """PLANT 탭 렌더링"""
-    # 1. 공장 선택
-    selected_plt = st.selectbox("Plant Select", config.plant_codes[:-1], index=0)
-    st.markdown("---")
 
     # 2. 주요 지표 표시
     cols = st.columns(4, gap="medium")
@@ -498,14 +495,19 @@ def render_rawdata_tab(data, selected_year):
 this_year = config.this_year
 year_selection_option = range(2023, this_year + 1)
 
-selected_year = st.radio(
-    label="Choose year?",
-    key=max(year_selection_option),
-    options=year_selection_option,
-    horizontal=True,
-    index=len(year_selection_option) - 1,
-    label_visibility="collapsed",
-)
+# 사이드바
+with st.sidebar:
+    st.subheader("Annual Quality Issue Report")
+    selected_year = st.selectbox(
+        label="Select Year",
+        key="year_selector",
+        options=year_selection_option,
+        index=len(year_selection_option) - 1,
+    )
+    st.divider()
+    # 1. 공장 선택
+    st.subheader("Plant Select for Plant Tab")
+    selected_plt = st.selectbox("Plant Select", config.plant_codes[:-1], index=0)
 
 # 데이터 로드
 data = load_data(selected_year)

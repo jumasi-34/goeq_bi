@@ -43,16 +43,11 @@ if config.DEV_MODE:
 # 선택 가능한 연도 범위 설정 (2025년부터 2021년까지)
 available_years = list(range(2025, 2020, -1))
 
-# 사용자 입력 컬럼 생성
-input_columns = st.columns(2)
-
-# 연도 선택 위젯
-selected_year = input_columns[0].selectbox(
-    "Select year :", available_years, key="year_select"
-)
-
-# 공장 선택 위젯 (마지막 공장 코드 제외)
-selected_plant = input_columns[1].selectbox("Select plant :", config.plant_codes[:-1])
+# 사이드바
+with st.sidebar:
+    st.subheader("Search")
+    selected_year = st.selectbox("Select year :", available_years, key="year_select")
+    selected_plant = st.selectbox("Select plant :", config.plant_codes[:-1])
 
 # 데이터 로드
 global_ncf_monthly = df_ncf.get_global_ncf_monthly_df(selected_year)
@@ -65,7 +60,7 @@ monthly_ppm_data_prev = df_ncf.get_monthly_ncf_ppm_by_plant_df(
 )
 defect_type_data = df_ncf.get_ncf_detail_by_plant(selected_year, selected_plant)
 
-# 전역 FM 부적합 현황 섹션
+# 전역 FM 부적합 현황 섹션ㅍ
 st.markdown(
     f"<h2>Global FM Non-conformance Status : <span style='color: blue;'>{selected_year}</span></h2>",
     unsafe_allow_html=True,

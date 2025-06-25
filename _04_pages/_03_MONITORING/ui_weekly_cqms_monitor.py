@@ -33,40 +33,37 @@ tabs = st.tabs(["Weekly Work Place"])
 all_status = ["Open", "Open & Close", "Close", "On-going"]
 all_status_for_Audit = ["NEW", "Upcoming", "CLOSE", "Need Update"]
 
+# 사이드바
+with st.sidebar:
+    # 날짜 선택 위젯
+    st.subheader("Select Date")
+    selected_date = st.date_input(
+        "Select a date:",
+        config.today,
+        min_value=dt.date(2022, 1, 1),
+        max_value=config.today.date(),
+        format="YYYY-MM-DD",
+    )
+    selected_date = dt.datetime.strptime(selected_date.strftime("%Y-%m-%d"), "%Y-%m-%d")
+
+    # 주간 범위 계산
+    start_of_week = selected_date - dt.timedelta(days=selected_date.weekday())
+    end_of_week = start_of_week + dt.timedelta(days=6)
+
+    # 검색 기간 표시
+    st.info(
+        "Shows the progress of each menu in the CQMS for the week based on the selected date."
+    )
 
 with tabs[0]:
     # 메트릭 컬럼 생성
-    metric = st.columns(4)
-
-    # 날짜 선택 섹션
-    with metric[0]:
-        with st.container(border=False):
-            # 날짜 선택 위젯
-            selected_date = st.date_input(
-                "Select a date:",
-                config.today,
-                min_value=dt.date(2022, 1, 1),
-                max_value=config.today.date(),
-                format="YYYY-MM-DD",
-            )
-            selected_date = dt.datetime.strptime(
-                selected_date.strftime("%Y-%m-%d"), "%Y-%m-%d"
-            )
-
-            # 주간 범위 계산
-            start_of_week = selected_date - dt.timedelta(days=selected_date.weekday())
-            end_of_week = start_of_week + dt.timedelta(days=6)
-
-            # 검색 기간 표시
-            st.markdown(
-                f"**Search Period** :  {start_of_week.strftime('%Y-%m-%d')} ~ {end_of_week.strftime('%Y-%m-%d')}"
-            )
-            st.info(
-                "Shows the progress of each menu in the CQMS for the week based on the selected date."
-            )
+    st.markdown(
+        f"**Search Period** :  {start_of_week.strftime('%Y-%m-%d')} ~ {end_of_week.strftime('%Y-%m-%d')}"
+    )
+    metric = st.columns(3)
 
     # 품질 이슈 메트릭
-    with metric[1]:
+    with metric[0]:
         with st.container(border=True):
             # 현재 주와 이전 주 데이터 조회
             df_pivot_qi = df_quality_issue.pivot_quality_by_week_and_status(
@@ -99,7 +96,7 @@ with tabs[0]:
                     )
 
     # 4M 변경 메트릭
-    with metric[2]:
+    with metric[1]:
         with st.container(border=True):
             # 현재 주와 이전 주 데이터 조회
             df_pivot_4m = df_4m_change.df_pivot_4m(
@@ -132,7 +129,7 @@ with tabs[0]:
                     )
 
     # 감사 메트릭
-    with metric[3]:
+    with metric[2]:
         with st.container(border=True):
             # 현재 주와 이전 주 데이터 조회
             df_pivot_audit = df_customer_audit.df_pivot_audit(

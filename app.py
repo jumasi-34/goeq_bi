@@ -44,7 +44,7 @@ from _00_database.db_client import get_client
 from _01_query.SAP.q_hk_personnel import CTE_HR_PERSONAL
 from _04_pages.config_pages import PAGE_CONFIGS
 from _05_commons.helper import SQLiteDML
-from _05_commons import config
+from _05_commons import config, helper
 
 # 기본 설정
 st.set_page_config(layout="wide")
@@ -224,7 +224,25 @@ if st.session_state.password_verified:
             st.stop()
 
         personel_nm = df_matched["PNL_NM"].values[0]
-        st.caption(
+        menu_col = st.columns([9, 1, 1], vertical_alignment="center")
+
+        # Navigation과 Logout을 동일한 디자인으로 통일
+        if menu_col[1].button(
+            label="Navigation",
+            icon=":material/home:",
+            type="tertiary",
+            use_container_width=True,
+        ):
+            st.switch_page("_04_pages/_09_SYSTEM/ui_navigation.py")
+        menu_col[2].button(
+            label="Log out",
+            icon=":material/logout:",
+            on_click=logout,
+            type="tertiary",
+            use_container_width=True,
+        )
+
+        menu_col[0].caption(
             f":grey[Welcome,] **{personel_nm}**:grey[! You have access with] **{st.session_state.role}** :grey[privileges.]"
         )
 
@@ -235,20 +253,20 @@ if st.session_state.password_verified:
                 page = st.Page(page["filename"], title=title, icon=page["icon"])
                 page_groups.setdefault(CATEGORY, []).append(page)
 
-        # User Guide와 Workplace 사이에 구분선 추가
-        if "User Guide" in page_groups and "Workplace" in page_groups:
-            page_groups["User Guide"].append(
-                st.Page(
-                    lambda: st.divider(),
-                    title="------------------------------------------------",
-                    icon="",
-                )
-            )
+        # # User Guide와 Workplace 사이에 구분선 추가
+        # if "User Guide" in page_groups and "Workplace" in page_groups:
+        #     page_groups["User Guide"].append(
+        #         st.Page(
+        #             lambda: st.divider(),
+        #             title="------------------------------------------------",
+        #             icon="",
+        #         )
+        #     )
 
         page_groups["System"] = page_groups.get("System", []) + [
             st.Page(logout, title="Log out", icon=":material/logout:")
         ]
-        pg = st.navigation(page_groups)
+        pg = st.navigation(page_groups, position="top")
     else:
         st.error("Failed to load user data. Please try again later.")
         pg = st.navigation([st.Page(login)])

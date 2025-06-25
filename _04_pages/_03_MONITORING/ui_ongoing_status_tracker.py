@@ -106,7 +106,14 @@ def display_section(
 
 
 reload_modules()
-selected_plant = setup_common_ui()
+
+with st.sidebar:
+    st.subheader("Search")
+    selected_plant = st.multiselect(
+        label="Select Plant",
+        options=config.plant_codes[:-1],
+        default=config.plant_codes[:-1],
+    )
 
 # 품질 이슈 섹션
 qi_df = df_quality_issue.load_ongoing_quality_issues(selected_plant)
