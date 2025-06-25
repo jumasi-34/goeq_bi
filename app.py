@@ -139,6 +139,31 @@ def login():
     selected_role = st.selectbox("Choose your role", ROLES)
     personel_id_local = st.text_input("Personnel ID (8-digit number)", max_chars=8)
 
+    footer = """
+    <style>
+    .footer {
+        position: fixed;
+        bottom: 0;
+        width: 100%;
+        background-color: #f9f9f9;
+        text-align: center;
+        padding: 8px 0;
+        font-size: 13px;
+        color: #6c757d;
+        border-top: 1px solid #dee2e6;
+    }
+    </style>
+
+    <div class="footer">
+        For inquiries or improvement requests, please contact: 
+        <br>
+        Jungman Sim (Global OE Quality Team) 📞 +82-42-724-2957 | ✉️ Jungman.Sim@hankookn.com <br>
+        Eunyoung Woo (Global OE Quality Team) 📞 +82-42-724-2942 | ✉️ Eunyoung.Woo@hankookn.com
+    </div>
+    """
+
+    st.markdown(footer, unsafe_allow_html=True)
+
     # 인사번호 유효성 검사
     if personel_id_local and not re.match(r"^\d{8}$", personel_id_local):
         st.warning("Please enter a valid 8-digit number.")
@@ -194,6 +219,42 @@ def login():
         except Exception as e:
             logger.error(f"Login process error: {str(e)}")
             st.error("An error occurred during login. Please try again.")
+
+    # 애플리케이션 요약 정보 추가
+    st.markdown("---")
+
+    # 애플리케이션 개요 섹션
+    st.markdown("**Global OE Quality Integrated Data and Analytics Platform**")
+    desc_col = st.columns([3, 2, 2])
+    desc_col[0].markdown(
+        """
+    ### :material/monitoring: **Core Features**
+    - **CQMS Integration**: Quality Issue Management, 4M Change Management, and Customer Audit Monitoring
+    - **Production Quality Analysis**: GMES-based production, NCF, RR, Weight, CTL, Uniformity data analysis
+    - **OE Application Management**: HOPE system-based OE product information management
+    - **Return Data Analysis**: HGWS system-based return status analysis
+    """
+    )
+    desc_col[1].markdown(
+        """
+    ### :material/admin_panel_settings: **Role-Based Access Control**
+    - **Viewer**: Read-only access to dashboards and reports
+    - **Contributor**: Data entry and modification capabilities
+    - **Admin**: Full system administration and configuration rights
+    """
+    )
+
+    desc_col[2].markdown(
+        """
+    ### :material/settings: **Current Status**
+    - Real-time data integration with enterprise systems
+    - Integrated dashboard and analysis tools
+    - Automated data processing and report generation
+    - Secure session management with timeout protection
+    """
+    )
+
+    st.markdown("---")
 
 
 def logout():
