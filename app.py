@@ -15,6 +15,7 @@ from typing import Dict, Optional
 from dotenv import load_dotenv
 import logging
 import cx_Oracle
+import pandas as pd
 
 # 프로젝트 루트 디렉토리를 Python 경로에 추가
 project_root = os.getenv("PROJECT_ROOT", os.path.dirname(os.path.abspath(__file__)))
@@ -84,8 +85,26 @@ def load_personnel_df():
         logger.error("No data returned from Snowflake query")
         return None
 
+    # 컬럼명을 대문자로 변환
     df.columns = df.columns.str.upper()
-    df["PNL_NO"] = df["PNL_NO"].astype(int)
+
+    # 수동 데이터 추가
+    manual_df = pd.DataFrame(
+        [
+            {"PNL_NO": 21300315, "PNL_NM": "KIM JEE WOONG"},
+            {"PNL_NO": 21000075, "PNL_NM": "SOUNG HYUN JUN"},
+            {"PNL_NO": 21100293, "PNL_NM": "KIM SEUNG JAE"},
+            {"PNL_NO": 21200424, "PNL_NM": "OH JIN TAEK"},
+            {"PNL_NO": 21604756, "PNL_NM": "RYU JE WOOK"},
+        ]
+    )
+
+    # 데이터프레임 결합 후 인덱스 재설정
+    df = pd.concat([df, manual_df], ignore_index=True)
+
+    # PNL_NO를 object 타입으로 변환 (문자열과 숫자 혼재 가능)
+    df["PNL_NO"] = df["PNL_NO"].astype("object")
+
     return df
 
 
@@ -276,15 +295,45 @@ st.logo(image="_06_assets/logo.png", icon_image="_06_assets/logo_only.png")
 if st.session_state.password_verified:
     df_personnel = load_personnel_df()
     if df_personnel is not None:
-        df_matched = df_personnel[
-            df_personnel["PNL_NO"] == st.session_state.personel_id
-        ]
+        # 디버깅을 위한 데이터 정보 출력 (개발 환경에서만)
+        logger.info(f"Personnel data shape: {df_personnel.shape}")
+        logger.info(f"Personnel data columns: {df_personnel.columns.tolist()}")
+        logger.info(f"Personnel data types: {df_personnel.dtypes.to_dict()}")
 
-        if df_matched.empty:
-            st.warning("No matching personnel ID record found.")
+        # 중복된 PNL_NO 확인
+        duplicates = df_personnel[
+            df_personnel.duplicated(subset=["PNL_NO"], keep=False)
+        ]
+        if not duplicates.empty:
+            logger.warning(
+                f"Found duplicate PNL_NO entries: {duplicates['PNL_NO'].tolist()}"
+            )
+
+        # 사용자 ID 매칭 (더 안전한 방식)
+        try:
+            user_id = int(st.session_state.personel_id)
+            df_matched = df_personnel[df_personnel["PNL_NO"] == user_id]
+
+            if df_matched.empty:
+                st.warning("No matching personnel ID record found.")
+                st.stop()
+
+            # 중복된 사용자 ID가 있는 경우 첫 번째 결과만 사용
+            if len(df_matched) > 1:
+                logger.warning(
+                    f"Multiple records found for user ID {user_id}, using first match"
+                )
+                df_matched = df_matched.iloc[:1]
+
+            personel_nm = df_matched["PNL_NM"].values[0]
+
+        except (ValueError, TypeError) as e:
+            logger.error(
+                f"Error processing user ID {st.session_state.personel_id}: {str(e)}"
+            )
+            st.error("Invalid user ID format. Please contact administrator.")
             st.stop()
 
-        personel_nm = df_matched["PNL_NM"].values[0]
         menu_col = st.columns([9, 1, 1], vertical_alignment="center")
 
         # Navigation과 Logout을 동일한 디자인으로 통일
