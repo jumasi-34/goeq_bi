@@ -103,7 +103,7 @@ def load_personnel_df():
     df = pd.concat([df, manual_df], ignore_index=True)
 
     # PNL_NO를 object 타입으로 변환 (문자열과 숫자 혼재 가능)
-    df["PNL_NO"] = df["PNL_NO"].astype("object")
+    df["PNL_NO"] = pd.to_numeric(df["PNL_NO"], errors="coerce").fillna(0).astype(int)
 
     return df
 
