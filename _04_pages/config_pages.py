@@ -88,7 +88,7 @@ PAGE_CONFIGS = {
         "filename": "_04_pages/_05_USER_GUIDE/ui_oequality_bi_guide.py",
         "icon": ":material/bar_chart:",
         "category": "User Guide",
-        "roles": ["Admin"],
+        "roles": ["Viewer", "Contributor", "Admin"],
     },
     "CQMS User Guide": {
         "filename": "_04_pages/_05_USER_GUIDE/ui_cqms_userguide.py",
