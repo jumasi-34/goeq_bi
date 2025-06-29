@@ -13,8 +13,17 @@ OE Assessment 결과 조회 페이지
 최종 수정일: [날짜]
 """
 
+# =============================================================================
+# Import Libraries
+# =============================================================================
 import streamlit as st
+import pandas as pd
+import plotly.graph_objects as go
+
+# Database
 from _00_database.db_client import get_client
+
+# GMES Data Processing
 from _02_preprocessing.GMES.df_ctl import (
     get_ctl_raw_individual_df,
     get_groupby_doc_ctl_df,
@@ -31,9 +40,26 @@ from _02_preprocessing.GMES.df_weight import (
     get_groupby_weight_ym_df,
     get_weight_individual_df,
 )
+
+# Other System Data Processing
+from _02_preprocessing.HGWS.df_hgws import get_hgws_df
+from _02_preprocessing.CQMS.df_cqms_unified import get_cqms_unified_df
+from _02_preprocessing.HOPE.df_oeapp import load_oeapp_df_by_mcode
+
+# Visualization
 from _03_visualization._08_ADMIN import viz_oeassessment_result_viewer as viz
+from _03_visualization import config_plotly
+from _05_commons.css_style_config import load_custom_css
+
+# =============================================================================
+# CSS Styles
+# =============================================================================
+load_custom_css()
 
 
+# =============================================================================
+# Utility Functions
+# =============================================================================
 def remove_outliers(group):
     """
     IQR 방법을 사용하여 그룹별 아웃라이어를 제거하는 함수
@@ -58,89 +84,289 @@ def remove_outliers(group):
     return group[(group["MRM_WGT"] >= lower_bound) & (group["MRM_WGT"] <= upper_bound)]
 
 
-# =============================================================================
-# 메인 페이지 UI 구성
-# =============================================================================
+def multi_condition_style(val):
+    if pd.isna(val) or val == 0:
+        return "color: black"
+    elif val > 80:
+        return f"color: {config_plotly.POSITIVE_CLR}"
+    elif val > 50:
+        return f"color: {config_plotly.ORANGE_CLR}"
+    elif val > 0:
+        return f"color: {config_plotly.NEGATIVE_CLR}"
+    else:
+        return ""  # 기본 스타일
 
-main_tab = st.tabs(["Overview", "Detail", "Description"])
 
-# SQLite 데이터베이스에서 Assessment 결과 데이터 로드
-result_df = get_client("sqlite").execute("SELECT * FROM mass_assess_result")
-with main_tab[0]:
+# =============================================================================
+# Data Loading
+# =============================================================================
+def load_assessment_result():
+    """Assessment 결과 데이터를 SQLite 데이터베이스에서 로드"""
+    return get_client("sqlite").execute("SELECT * FROM mass_assess_result")
+
+
+def load_sellin_data(mcode):
+    """판매 데이터를 SQLite 데이터베이스에서 로드"""
+    return get_client("sqlite").execute(
+        f"SELECT * FROM sellin_monthly_agg WHERE M_CODE = '{mcode}'"
+    )
+
+
+# =============================================================================
+# 데이터 처리 함수들
+# =============================================================================
+def calculate_quality_indices(result_df):
+    """
+    Assessment 결과에 품질 지수들을 계산하여 추가합니다.
+
+    계산되는 지수들:
+    - NCF Index: 부적합률 기반 지수 (0-100)
+    - UF Index: Uniformity 합격률 기반 지수 (0-100)
+    - GT Weight Index: 중량 합격률 기반 지수 (0-100)
+    - RR Index: Reliability 합격률 기반 지수 (0-100)
+    - CTL Index: Control 합격률 기반 지수 (0-100)
+
+    Args:
+        result_df (pd.DataFrame): 원본 Assessment 결과 데이터프레임
+            - ncf_qty: 부적합 수량
+            - total_qty: 총 수량
+            - pass_rate: UF 합격률
+            - wt_pass_qty: 중량 합격 수량
+            - wt_ins_qty: 중량 검사 수량
+            - rr_pass_rate_pdf: RR 합격률
+            - ctl_pass_rate: CTL 합격률
+
+    Returns:
+        pd.DataFrame: 품질 지수가 추가된 데이터프레임
+            - ncf_rate: NCF 비율 (ppm)
+            - ncf_idx: NCF 지수 (0-100)
+            - uf_idx: UF 지수 (0-100)
+            - gt_rate: GT Weight 비율
+            - gt_idx: GT Weight 지수 (0-100)
+            - rr_idx: RR 지수 (0-100)
+            - ctl_idx: CTL 지수 (0-100)
+    """
+
+    def calculate_index(rate, config, reverse=False):
+        """
+        품질 지수를 계산하는 헬퍼 함수
+
+        Args:
+            rate (pd.Series): 계산할 비율 데이터
+            config (dict): 지수 계산 설정 (max_rate, min_rate)
+            reverse (bool): 역방향 계산 여부 (높은 값이 좋은 경우 False, 낮은 값이 좋은 경우 True)
+
+        Returns:
+            pd.Series: 계산된 지수 (0-100)
+        """
+        max_rate = config["max_rate"]
+        min_rate = config["min_rate"]
+
+        if reverse:
+            # 낮은 값이 좋은 경우 (NCF)
+            index = ((max_rate - rate) / (max_rate - min_rate) * 100).clip(0, 100)
+        else:
+            # 높은 값이 좋은 경우 (UF, GT Weight, RR, CTL)
+            index = ((rate - min_rate) / (max_rate - min_rate) * 100).clip(0, 100)
+
+        return index.round(1)
+
+    # NCF 지수 계산
+    result_df["ncf_rate"] = (
+        result_df["ncf_qty"]
+        / result_df["total_qty"]
+        * QUALITY_INDICES_CONFIG["ncf"]["multiplier"]
+    )
+    result_df["ncf_idx"] = calculate_index(
+        result_df["ncf_rate"], QUALITY_INDICES_CONFIG["ncf"], reverse=True
+    )
+
+    # UF 지수 계산
+    result_df["uf_idx"] = calculate_index(
+        result_df["pass_rate"], QUALITY_INDICES_CONFIG["uf"]
+    )
+
+    # GT Weight 지수 계산
+    result_df["gt_rate"] = result_df["wt_pass_qty"] / result_df["wt_ins_qty"]
+    result_df["gt_idx"] = calculate_index(
+        result_df["gt_rate"], QUALITY_INDICES_CONFIG["gt_weight"]
+    )
+
+    # RR 지수 계산
+    result_df["rr_idx"] = calculate_index(
+        result_df["rr_pass_rate_pdf"], QUALITY_INDICES_CONFIG["rr"]
+    )
+
+    # CTL 지수 계산
+    result_df["ctl_idx"] = calculate_index(
+        result_df["ctl_pass_rate"], QUALITY_INDICES_CONFIG["ctl"]
+    )
+
+    return result_df
+
+
+def format_date_string(date_str):
+    """
+    날짜 문자열을 YYYY-MM-DD 형식으로 변환
+
+    Args:
+        date_str (str): YYYYMMDD 형식의 날짜 문자열
+
+    Returns:
+        str: YYYY-MM-DD 형식의 날짜 문자열
+    """
+    return f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:]}"
+
+
+def get_selected_data_info(result_df, selected_row_index):
+    """
+    선택된 행의 데이터 정보를 추출
+
+    Args:
+        result_df (pd.DataFrame): Assessment 결과 데이터프레임
+        selected_row_index (int): 선택된 행 인덱스
+
+    Returns:
+        dict: 선택된 데이터 정보
+    """
+    selected_row = result_df.iloc[selected_row_index]
+    return {
+        "mcode": selected_row["m_code"],
+        "start_date": selected_row["min_date"],
+        "end_date": selected_row["max_date"],
+        "formatted_start_date": format_date_string(selected_row["min_date"]),
+        "formatted_end_date": format_date_string(selected_row["max_date"]),
+    }
+
+
+# =============================================================================
+# UI 섹션 함수들
+# =============================================================================
+def render_overview_tab(result_df):
+    """Overview 탭 렌더링"""
     st.dataframe(result_df, use_container_width=True, hide_index=True)
     st.subheader("대상 규격 수")
     st.write(f"대상 규격 수: {len(result_df)}")
 
-with main_tab[1]:
-    # 페이지 제목 설정
-    st.title("OE Assessment Result Viewer")
 
-    # Assessment 결과 섹션 제목
-    st.subheader("Assessment Result")
-
-    # 세션 상태에 결과 데이터프레임 저장 (성능 최적화)
-    if "result_df" not in st.session_state:
-        st.session_state["result_df"] = result_df
-
-    # Assessment 결과를 표 형태로 표시
-    # - use_container_width: 컨테이너 전체 너비 사용
-    # - hide_index: 인덱스 숨김
-    # - selection_mode: 단일 행 선택 모드
-    event_df = st.dataframe(
-        result_df,
-        use_container_width=True,
-        hide_index=True,
-        key="event_df",
-        on_select="rerun",
-        selection_mode="single-row",
+def render_production_section(
+    selected_mcode, selected_start_date, selected_end_date, result_df
+):
+    """생산량 분석 섹션 렌더링"""
+    production_df = get_daily_production_df(
+        mcode=selected_mcode,
+        start_date=selected_start_date,
+        end_date=selected_end_date,
     )
+    total_production = result_df[result_df["m_code"] == selected_mcode][
+        "total_qty"
+    ].values[0]
 
-    # =============================================================================
-    # 분석 대상 데이터 설정
-    # =============================================================================
-    # 선택된 행이 있는지 확인
-    if event_df.selection.rows:
-        selected_mcode = result_df.iloc[event_df.selection.rows[0]]["m_code"]
-        selected_start_date = result_df.iloc[event_df.selection.rows[0]]["min_date"]
-        selected_end_date = result_df.iloc[event_df.selection.rows[0]]["max_date"]
-
-        st.subheader("Selected Data")
-        st.subheader(f"M - CODE : {selected_mcode}")
-
-        # 날짜 형식을 YYYY-MM-DD로 변환 (일부 함수에서 사용)
-        formatted_start_date = f"{selected_start_date[:4]}-{selected_start_date[4:6]}-{selected_start_date[6:]}"
-        formatted_end_date = (
-            f"{selected_end_date[:4]}-{selected_end_date[4:6]}-{selected_end_date[6:]}"
+    with st.expander(
+        f"Total Production : {total_production:,.0f} ea",
+        icon=":material/factory:",
+        expanded=False,
+    ):
+        st.plotly_chart(
+            viz.draw_barplot_production(production_df), use_container_width=True
         )
 
-        # =============================================================================
-        # 생산량 분석 섹션
-        # =============================================================================
 
-        # 일별 생산량 데이터 조회 및 시각화
-        prdt_df = get_daily_production_df(
-            mcode=selected_mcode,
-            start_date=selected_start_date,
-            end_date=selected_end_date,
+def get_quality_status_indicator(idx_value):
+    """
+    품질 지표의 상태를 3단계로 시각적으로 표시하는 함수
+
+    Args:
+        idx_value (float): 품질 지수 값
+        reverse (bool): 역방향 판정 여부 (높은 값이 나쁜 경우 True)
+
+    Returns:
+        tuple: (status_text, status_level)
+    """
+    if idx_value >= 80:
+        status_text = "Excellent"
+        status_level = "blue"
+    elif idx_value >= 50:
+        status_text = "Warning"
+        status_level = "orange"
+    else:
+        status_text = "Critical"
+        status_level = "red"
+
+    return status_text, status_level
+
+
+def render_quality_section_with_status(
+    section_name,
+    current_value,
+    status_emoji,
+    status_text,
+    status_level,
+    icon,
+    unit="%",
+    reverse=False,
+):
+    """
+    품질 섹션을 상태 표시와 함께 렌더링하는 래퍼 함수
+
+    Args:
+        section_name (str): 섹션 이름
+        current_value (float): 현재 값
+        status_emoji (str): 상태 이모지
+        status_text (str): 상태 텍스트
+        status_level (str): 상태 레벨
+        icon (str): 섹션 아이콘
+        unit (str): 단위 (기본값: "%")
+        reverse (bool): 역방향 표시 여부 (NCF 등)
+    """
+    # 상태 표시 텍스트 생성
+    if reverse:
+        status_text_display = (
+            f"{status_emoji} {status_text} ({current_value:,.0f} {unit})"
         )
-        st.plotly_chart(viz.draw_barplot_production(prdt_df), use_container_width=True)
+    else:
+        status_text_display = (
+            f"{status_emoji} {status_text} ({current_value:,.1f}{unit})"
+        )
 
-        # =============================================================================
-        # NCF (부적합) 분석 섹션
-        # =============================================================================
+    with st.expander(
+        f"{section_name} : {current_value:,.1f if not reverse else 0f}{unit} | {status_text_display}",
+        icon=icon,
+        expanded=False,
+    ):
+        # 섹션별 차트 렌더링을 위한 콜백 함수 반환
+        return True
 
-        # 2열 레이아웃으로 NCF 분석 결과 표시
+
+def render_ncf_section(
+    selected_mcode, selected_start_date, selected_end_date, result_df
+):
+    """NCF 분석 섹션 렌더링"""
+    ncf_df = get_ncf_monthly_df(
+        mcode=selected_mcode,
+        start_date=selected_start_date,
+        end_date=selected_end_date,
+    )
+    ncf_ppm = result_df[result_df["m_code"] == selected_mcode]["ncf_rate"].values[0]
+    ncf_idx = result_df[result_df["m_code"] == selected_mcode]["ncf_idx"].values[0]
+
+    # 3단계 상태 평가 (NCF는 높을수록 나쁨 - reverse=True)
+    status_text, status_level = get_quality_status_indicator(ncf_idx)
+
+    # 상태 표시 텍스트 생성 (색상 적용)
+    status_text_display = f"**:{status_level}[{status_text} - {ncf_idx:,.0f}p]**"
+
+    with st.expander(
+        f"Non-Conformance Finding : {ncf_ppm:,.0f} ppm | {status_text_display}",
+        icon=":material/problem:",
+        expanded=False,
+    ):
+        # 상태에 따른 배경색 변경을 위한 컨테이너
+
         ncf_cols = st.columns(2)
 
-        # NCF 월별 수량 분석
-        ncf_df = get_ncf_monthly_df(
-            mcode=selected_mcode,
-            start_date=selected_start_date,
-            end_date=selected_end_date,
-        )
         ncf_cols[0].plotly_chart(viz.draw_barplot_ncf(ncf_df), use_container_width=True)
 
-        # NCF 부적합코드별 수량 분석 (파레토 차트)
         ncf_by_dft_cd_df = get_ncf_by_dft_cd(
             mcode=selected_mcode,
             start_date=selected_start_date,
@@ -150,14 +376,30 @@ with main_tab[1]:
             viz.draw_barplot_ncf_pareto(ncf_by_dft_cd_df), use_container_width=True
         )
 
-        # =============================================================================
-        # UF (Uniformity) 분석 섹션
-        # =============================================================================
 
-        # 2열 레이아웃으로 UF 분석 결과 표시
+def render_uf_section(
+    selected_mcode, selected_start_date, selected_end_date, result_df
+):
+    """UF 분석 섹션 렌더링"""
+    uf_pass_rate = (
+        result_df[result_df["m_code"] == selected_mcode]["pass_rate"].values[0] * 100
+    )
+    uf_idx = result_df[result_df["m_code"] == selected_mcode]["uf_idx"].values[0]
+
+    # 3단계 상태 평가 (UF Pass Rate는 높을수록 좋음 - reverse=False)
+    status_text, status_level = get_quality_status_indicator(uf_idx)
+
+    # 상태 표시 텍스트 생성 (색상 적용)
+    status_text_display = f"**:{status_level}[{status_text} - {uf_idx:,.0f}p]**"
+
+    with st.expander(
+        f"Uniformity Pass Rate : {uf_pass_rate:,.1f} % | {status_text_display}",
+        icon=":material/adjust:",
+        expanded=False,
+    ):
+        # 상태에 따른 배경색 변경을 위한 컨테이너
         uf_cols = st.columns(2)
 
-        # UF 월별 합격률 분석
         uf_pass_rate_df = calculate_uf_pass_rate_monthly(
             mcode=selected_mcode,
             start_date=selected_start_date,
@@ -167,10 +409,7 @@ with main_tab[1]:
             viz.draw_barplot_uf(uf_pass_rate_df), use_container_width=True
         )
 
-        # UF 항목별 합격률 분석
-        # 표준값 조회
         uf_standard_df = uf_standard(mcode=selected_mcode)
-        # 개별 측정값 조회
         uf_individual_df = uf_individual(
             mcode=selected_mcode,
             start_date=selected_start_date,
@@ -181,14 +420,29 @@ with main_tab[1]:
             use_container_width=True,
         )
 
-        # =============================================================================
-        # 중량 분석 섹션
-        # =============================================================================
 
-        # 2열 레이아웃으로 중량 분석 결과 표시
+def render_weight_section(
+    selected_mcode, selected_start_date, selected_end_date, result_df
+):
+    """중량 분석 섹션 렌더링"""
+    wt_pass_rate = (
+        result_df[result_df["m_code"] == selected_mcode]["gt_rate"].values[0] * 100
+    )
+    wt_idx = result_df[result_df["m_code"] == selected_mcode]["gt_idx"].values[0]
+
+    # 3단계 상태 평가 (Weight Pass Rate는 높을수록 좋음 - reverse=False)
+    status_text, status_level = get_quality_status_indicator(wt_idx)
+
+    # 상태 표시 텍스트 생성 (색상 적용)
+    status_text_display = f"**:{status_level}[{status_text} - {wt_idx:,.0f}p]**"
+
+    with st.expander(
+        f"GT Weight Pass Rate : {wt_pass_rate:,.1f} % | {status_text_display}",
+        expanded=False,
+        icon=":material/weight:",
+    ):
         wt_col = st.columns(2)
 
-        # 중량 부적합 월별 분석
         groupby_weight_ym_df = get_groupby_weight_ym_df(
             mcode=selected_mcode,
             start_date=selected_start_date,
@@ -198,24 +452,20 @@ with main_tab[1]:
             viz.draw_weight_distribution(groupby_weight_ym_df), use_container_width=True
         )
 
-        # 개별 중량 데이터 조회
         wt_individual_df = get_weight_individual_df(
             mcode=selected_mcode,
             start_date=selected_start_date,
             end_date=selected_end_date,
         )
 
-        # 월별로 아웃라이어 제거하여 정확한 분포 분석
         wt_individual_df_no_outliers = (
             wt_individual_df.groupby("INS_DATE_YM")
             .apply(remove_outliers)
             .reset_index(drop=True)
         )
 
-        # 표준 중량값 추출 (마지막 행의 표준값 사용)
         wt_spec = wt_individual_df["STD_WGT"].iloc[-1]
 
-        # 아웃라이어가 제거된 중량 분포 시각화
         wt_col[1].plotly_chart(
             viz.draw_weight_distribution_individual(
                 wt_individual_df_no_outliers, wt_spec
@@ -223,88 +473,525 @@ with main_tab[1]:
             use_container_width=True,
         )
 
-        # =============================================================================
-        # RR (Reliability) 분석 섹션
-        # =============================================================================
 
-        # 2열 레이아웃으로 RR 분석 결과 표시
+def render_rr_section(
+    selected_mcode, formatted_start_date, formatted_end_date, result_df
+):
+    """RR 분석 섹션 렌더링"""
+    rr_pass_rate = (
+        result_df[result_df["m_code"] == selected_mcode]["rr_pass_rate_pdf"].values[0]
+        * 100
+    )
+    rr_idx = result_df[result_df["m_code"] == selected_mcode]["rr_idx"].values[0]
+
+    # 3단계 상태 평가 (RR Pass Rate는 높을수록 좋음 - reverse=False)
+    status_text, status_level = get_quality_status_indicator(rr_idx)
+
+    # 상태 표시 텍스트 생성 (색상 적용)
+    status_text_display = f"**:{status_level}[{status_text} - {rr_idx:,.0f}p]**"
+
+    with st.expander(
+        f"RR Pass Rate : {rr_pass_rate:,.1f} % | {status_text_display}",
+        expanded=False,
+        icon=":material/tire_repair:",
+    ):
+        # 상태에 따른 배경색 변경을 위한 컨테이너
+
         rr_col = st.columns(2)
 
-        # RR 원시 데이터 조회 (날짜 형식: YYYY-MM-DD)
         rr_df = get_processed_raw_rr_data(
             mcode=selected_mcode,
             start_date=formatted_start_date,
             end_date=formatted_end_date,
         )
-        # 날짜순으로 정렬
         rr_df = rr_df.sort_values(by="SMPL_DATE").reset_index(drop=True)
 
-        # RR 표준값 조회 및 필터링
         rr_standard_df = get_rr_oe_list_df()
         rr_standard_df = rr_standard_df[rr_standard_df["M_CODE"] == selected_mcode]
 
-        # RR 데이터가 존재하는 경우에만 시각화
         if len(rr_df) > 0:
-            # RR 트렌드 분석
             rr_col[0].plotly_chart(
                 viz.draw_rr_trend(rr_df, rr_standard_df), use_container_width=True
             )
-            # RR 분포 분석
             rr_col[1].plotly_chart(
                 viz.draw_rr_distribution(rr_df, rr_standard_df),
                 use_container_width=True,
             )
         else:
-            # RR 데이터가 없는 경우 경고 메시지 표시
             st.warning("No RR data found")
 
-        # =============================================================================
-        # CTL (Control) 분석 섹션
-        # =============================================================================
 
-        # 1:3 비율로 CTL 분석 결과 표시 (트렌드:상세 = 1:3)
+def render_ctl_section(
+    selected_mcode, selected_start_date, selected_end_date, result_df
+):
+    """CTL 분석 섹션 렌더링"""
+    ctl_pass_rate = (
+        result_df[result_df["m_code"] == selected_mcode]["ctl_pass_rate"].values[0]
+        * 100
+    )
+    ctl_idx = result_df[result_df["m_code"] == selected_mcode]["ctl_idx"].values[0]
+
+    # 3단계 상태 평가 (CTL Pass Rate는 높을수록 좋음 - reverse=False)
+    status_text, status_level = get_quality_status_indicator(ctl_idx)
+
+    # 상태 표시 텍스트 생성 (색상 적용)
+    with st.expander(
+        f"CTL Pass Rate : {ctl_pass_rate:,.1f} % | **:{status_level}[{status_text} - {ctl_idx:,.0f}p]**",
+        expanded=False,
+        icon=":material/straighten:",
+    ):
+        # 상태에 따른 배경색 변경을 위한 컨테이너
+
         ctl_col = st.columns([1, 3])
 
-        # CTL 원시 데이터 조회
         ctl_raw_data = get_ctl_raw_individual_df(
             mcode=selected_mcode,
             start_date=selected_start_date,
             end_date=selected_end_date,
         )
 
-        # CTL 데이터가 존재하는 경우에만 시각화
         if len(ctl_raw_data) > 0:
-            # CTL 그룹별 집계 데이터 조회
-            gruopby_ctl_df = get_groupby_doc_ctl_df(
+            grouped_ctl_df = get_groupby_doc_ctl_df(
                 mcode=selected_mcode,
                 start_date=selected_start_date,
                 end_date=selected_end_date,
             )
 
-            # CTL 트렌드 분석 (좌측 1/4 영역)
             ctl_col[0].plotly_chart(
-                viz.draw_ctl_trend(gruopby_ctl_df), use_container_width=True
+                viz.draw_ctl_trend(grouped_ctl_df), use_container_width=True
             )
-
-            # CTL 상세 분석 (우측 3/4 영역)
             ctl_col[1].plotly_chart(
                 viz.draw_ctl_detail(ctl_raw_data), use_container_width=True
             )
         else:
-            # CTL 데이터가 없는 경우 경고 메시지 표시
             st.warning("No CTL data found")
 
+
+def render_detail_tab(result_df):
+    """Detail 탭 렌더링"""
+    if "result_df" not in st.session_state:
+        st.session_state["result_df"] = result_df
+
+    with st.expander(
+        "Assessment Detail Table", expanded=True, icon=":material/table_chart:"
+    ):
+
+        # 품질 지수 계산
+        result_df = calculate_quality_indices(result_df)
+        result_df[["pass_rate", "gt_rate", "rr_pass_rate_pdf", "ctl_pass_rate"]] = (
+            result_df[["pass_rate", "gt_rate", "rr_pass_rate_pdf", "ctl_pass_rate"]]
+            * 100
+        )
+        mcode_list = result_df["m_code"].tolist()
+        unified_cqms_df = get_cqms_unified_df(m_code=mcode_list)
+        unified_cqms_df = unified_cqms_df.pivot_table(
+            index="M_CODE",
+            columns="CATEGORY",
+            aggfunc="size",
+        )
+        unified_cqms_df = unified_cqms_df.reset_index()
+        unified_cqms_df = unified_cqms_df.rename(columns={"M_CODE": "m_code"})
+        result_df = pd.merge(
+            result_df,
+            unified_cqms_df,
+            on="m_code",
+            how="left",
+        )
+        result_df["Quality Issue"] = result_df["Quality Issue"].fillna(value=0)
+        result_df["4M Change"] = result_df["4M Change"].fillna(value=0)
+        result_df["Audit"] = result_df["Audit"].fillna(value=0)
+
+        hgws_df = get_hgws_df(m_code=mcode_list)
+        hgws_df = hgws_df.groupby("MCODE").agg({"RETURN CNT": "sum"}).reset_index()
+        hgws_df = hgws_df.rename(
+            columns={"MCODE": "m_code", "RETURN CNT": "Field Return"}
+        )
+        result_df = pd.merge(
+            result_df,
+            hgws_df,
+            on="m_code",
+            how="left",
+        )
+        result_df["Field Return"] = result_df["Field Return"].fillna(value=0)
+
+        show_full_table = st.toggle("Show Full Table", value=False)
+        if show_full_table:
+            remain_columns = [
+                "m_code",
+                "plant_x",
+                "min_date",
+                "max_date",
+                "total_qty",
+                "ncf_qty",
+                "ncf_rate",
+                "ncf_idx",
+                "uf_ins_qty",
+                "uf_pass_qty",
+                "pass_rate",
+                "uf_idx",
+                "wt_ins_qty",
+                "wt_pass_qty",
+                "gt_rate",
+                "gt_idx",
+                "count",
+                "rr_pass_rate_pdf",
+                "rr_idx",
+                "ctl_pass_rate",
+                "ctl_idx",
+                "Quality Issue",
+                "4M Change",
+                "Audit",
+                "Field Return",
+            ]
+        else:
+            remain_columns = [
+                "m_code",
+                "plant_x",
+                "min_date",
+                "max_date",
+                "total_qty",
+                "ncf_idx",
+                "uf_idx",
+                "gt_idx",
+                "rr_idx",
+                "ctl_idx",
+                "Quality Issue",
+                "4M Change",
+                "Audit",
+                "Field Return",
+            ]
+
+        # pandas 스타일링 적용
+        styled_df = (
+            result_df[remain_columns]
+            .style.set_properties(
+                subset=["ncf_idx", "uf_idx", "gt_idx", "rr_idx", "ctl_idx"],
+                **{
+                    "background-color": f"{config_plotly.LIGHT_GRAY_CLR}",
+                    "text-align": "center",
+                    "font-size": "12px",
+                    "border": "1px solid #ddd",
+                },
+            )
+            .applymap(
+                multi_condition_style,
+                subset=["ncf_idx", "uf_idx", "gt_idx", "rr_idx", "ctl_idx"],
+            )
+        )
+
+        column_config = {
+            "m_code": st.column_config.TextColumn("M-Code", width="small"),
+            "plant_x": st.column_config.TextColumn("Plant", width="small"),
+            "min_date": st.column_config.TextColumn(
+                "Start",
+                help="Mass Production Start Date",
+                width="small",
+            ),
+            "max_date": st.column_config.TextColumn(
+                "End",
+                help="Mass Production End Date",
+                width="small",
+            ),
+            "total_qty": st.column_config.NumberColumn(
+                "Total Qty", width="small", format="%.0f"
+            ),
+            "ncf_qty": st.column_config.NumberColumn(
+                "NCF Qty", width="small", format="%.0f"
+            ),
+            "ncf_rate": st.column_config.NumberColumn("NCF(ppm)", format="%.0f ppm"),
+            "ncf_idx": st.column_config.NumberColumn(
+                "NCF Index", width="small", format="%.0f"
+            ),
+            "uf_ins_qty": st.column_config.NumberColumn("UF Insp Qty", format="%.0f"),
+            "uf_pass_qty": st.column_config.NumberColumn("UF Pass Qty", format="%.0f"),
+            "pass_rate": st.column_config.NumberColumn("UF(%)", format="%.1f%%"),
+            "uf_idx": st.column_config.NumberColumn(
+                "UF Index", width="small", format="%.0f"
+            ),
+            "wt_ins_qty": st.column_config.NumberColumn("WT Insp Qty", format="%.0f"),
+            "wt_pass_qty": st.column_config.NumberColumn("WT Pass Qty", format="%.0f"),
+            "gt_rate": st.column_config.NumberColumn(
+                "GT(%)", width="small", format="%.1f%%"
+            ),
+            "gt_idx": st.column_config.NumberColumn(
+                "GT Index", width="small", format="%.0f"
+            ),
+            "count": st.column_config.NumberColumn("RR Insp Qty", format="%.0f"),
+            "rr_pass_rate_pdf": st.column_config.NumberColumn(
+                "RR(%)", width="small", format="%.1f%%"
+            ),
+            "rr_idx": st.column_config.NumberColumn(
+                "RR Index", width="small", format="%.0f"
+            ),
+            "ctl_pass_rate": st.column_config.NumberColumn(
+                "CTL(%)", width="small", format="%.1f%%"
+            ),
+            "ctl_idx": st.column_config.NumberColumn(
+                "CTL Index", width="small", format="%.0f"
+            ),
+            "Quality Issue": st.column_config.NumberColumn(
+                "Quality Issue", width="small", format="%.0f"
+            ),
+            "4M Change": st.column_config.NumberColumn(
+                "4M Change", width="small", format="%.0f"
+            ),
+            "Audit": st.column_config.NumberColumn(
+                "Audit", width="small", format="%.0f"
+            ),
+            "Field Return": st.column_config.NumberColumn(
+                "Field Return", width="small", format="%.0f"
+            ),
+        }
+
+        # 데이터프레임 표시
+        assessment_result_df = st.dataframe(
+            styled_df,
+            use_container_width=True,
+            hide_index=True,
+            column_config=column_config,
+            key="event_df",
+            on_select="rerun",
+            selection_mode="single-row",
+        )
+
+    # 선택된 행 처리
+    if assessment_result_df.selection.rows:
+        selected_data = get_selected_data_info(
+            result_df, assessment_result_df.selection.rows[0]
+        )
+
+        # 선택된 모델 정보를 카드 형태로 표시
+        st.markdown(
+            f"""
+            <div class="card-container">
+                <h3><span class="material-symbols-rounded">feature_search</span> Search Criteria Information</h3>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+                    <div style="background: rgba(255,255,255,0.1); padding: 1rem; border-radius: 8px;">
+                        <strong>M-Code:</strong><br>
+                        <span style="font-size: 1.2rem; font-weight: bold;">{selected_data['mcode']}</span>
+                    </div>
+                    <div style="background: rgba(255,255,255,0.1); padding: 1rem; border-radius: 8px;">
+                        <strong>Start Date:</strong><br>
+                        <span style="font-size: 1.2rem;">{selected_data['formatted_start_date']}</span>
+                    </div>
+                    <div style="background: rgba(255,255,255,0.1); padding: 1rem; border-radius: 8px;">
+                        <strong>End Date:</strong><br>
+                        <span style="font-size: 1.2rem;">{selected_data['formatted_end_date']}</span>
+                    </div>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        oeapp_df = load_oeapp_df_by_mcode(m_code=selected_data["mcode"])
+
+        # SOP, EOP 날짜 형식 변환 (YYYYMM -> YYYY-MM 형태의 문자열로 변환)
+        if not oeapp_df.empty:
+            for date_col in ["SOP", "EOP"]:
+                if date_col in oeapp_df.columns:
+                    oeapp_df[date_col] = oeapp_df[date_col].apply(
+                        lambda x: (
+                            f"{str(x)[:4]}-{str(x)[4:6]}"
+                            if pd.notna(x) and str(x) != "nan" and len(str(x)) == 6
+                            else x
+                        )
+                    )
+
+        # region Project Information
+        st.markdown(f"#### :material/info: **:grey[Project Information]**")
+        if not oeapp_df.empty:
+            project_info_col = st.columns([0.5, 10], vertical_alignment="center")
+            # 규격 정보
+            project_info_col[1].markdown(
+                f"""
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+                <div style="background: rgba(255,255,255,0.1); padding: 1rem; border-radius: 8px;">
+                    <strong>Plant:</strong><br>
+                    <span style="font-size: 1.2rem;">{oeapp_df.iloc[0]['PLANT']}</span>
+                </div>
+                <div style="background: rgba(255,255,255,0.1); padding: 1rem; border-radius: 8px;">
+                    <strong>Size:</strong><br>
+                    <span style="font-size: 1.2rem;">{oeapp_df.iloc[0]['SIZE']}</span>
+                </div>
+                <div style="background: rgba(255,255,255,0.1); padding: 1rem; border-radius: 8px;">
+                    <strong>Pattern:</strong><br>
+                    <span style="font-size: 1.2rem;">{oeapp_df.iloc[0]['PATTERN']}</span>
+                </div>
+                <div style="background: rgba(255,255,255,0.1); padding: 1rem; border-radius: 8px;">
+                    <strong>Product Name:</strong><br>
+                    <span style="font-size: 1.2rem;">{oeapp_df.iloc[0]['PROD NAME']}</span>
+                </div>
+                <div style="background: rgba(255,255,255,0.1); padding: 1rem; border-radius: 8px;">
+                    <strong>EV / ICE :</strong><br>
+                    <span style="font-size: 1.2rem;">{oeapp_df.iloc[0]['EV']}</span>
+                </div>
+            </div>
+            """,
+                unsafe_allow_html=True,
+            )
+
+            # 프로젝트 정보
+            oe_app_info_col = st.columns([0.5, 1, 9], vertical_alignment="center")
+            oe_app_info_col[1].markdown(f"###### **:grey[OE App]**")
+
+            remain_col = [
+                "STATUS",
+                "CAR MAKER",
+                "SALES BRAND",
+                "VEHICLE MODEL(GLOBAL)",
+                # "VEHICLE MODEL(LOCAL)",
+                "PROJECT",
+                "SOP",
+                "EOP",
+            ]
+            column_config = {
+                "STATUS": st.column_config.TextColumn("Status", width="small"),
+                "CAR MAKER": st.column_config.TextColumn("Car Maker", width="small"),
+                "SALES BRAND": st.column_config.TextColumn(
+                    "Sales Brand", width="small"
+                ),
+                "VEHICLE MODEL(GLOBAL)": st.column_config.TextColumn(
+                    "Vehicle Model", width="medium"
+                ),
+                "PROJECT": st.column_config.TextColumn("Project", width="small"),
+                "SOP": st.column_config.TextColumn("SOP", width="small"),
+                "EOP": st.column_config.TextColumn("EOP", width="small"),
+            }
+            oe_app_info_col[2].dataframe(
+                oeapp_df[remain_col],
+                use_container_width=True,
+                hide_index=True,
+                column_config=column_config,
+            )
+        else:
+            st.info("No OE Application data available for the selected model code.")
+        # endregion
+
+        # region Metric Information
+        metric_title_col = st.columns([0.5, 6, 4], vertical_alignment="center")
+        metric_title_col[1].markdown(f"###### **:grey[OEM Event]**")
+        metric_title_col[2].markdown(f"###### **:grey[Field Return]**")
+
+        metric_col = st.columns([0.5, 6, 4], vertical_alignment="center")
+        cqms_unified_df = get_cqms_unified_df(m_code=selected_data["mcode"])
+        cqms_unified_df = (
+            cqms_unified_df.groupby("CATEGORY")
+            .agg(Count=("CATEGORY", "count"))
+            .reset_index()
+        )
+
+        with metric_col[1]:
+            cqms_col = st.columns(3)
+
+            cqms_col[0].metric(
+                label="Quality Issue",
+                value=(
+                    cqms_unified_df[cqms_unified_df["CATEGORY"] == "Quality Issue"][
+                        "Count"
+                    ].values[0]
+                ),
+                delta=None,
+            )
+            cqms_col[1].metric(
+                label="4M Change",
+                value=(
+                    cqms_unified_df[cqms_unified_df["CATEGORY"] == "4M Change"][
+                        "Count"
+                    ].values[0]
+                ),
+                delta=None,
+            )
+            cqms_col[2].metric(
+                label="Audit",
+                value=(
+                    cqms_unified_df[cqms_unified_df["CATEGORY"] == "Audit"][
+                        "Count"
+                    ].values[0]
+                ),
+                delta=None,
+            )
+        with metric_col[2]:
+            hgws_df = get_hgws_df(m_code=selected_data["mcode"])
+            hgws_df = hgws_df.sort_values(by="RETURN CNT", ascending=False)
+            if not hgws_df.empty:
+                trace = go.Bar(
+                    x=hgws_df["RETURN CNT"],
+                    y=hgws_df["REASON DESCRIPTION"],
+                    text=hgws_df["RETURN CNT"],
+                    textposition="outside",
+                    marker=dict(color=config_plotly.ORANGE_CLR),
+                    orientation="h",
+                )
+                layout = go.Layout(
+                    xaxis=dict(
+                        title="Field Return Count",
+                        range=[0, max(hgws_df["RETURN CNT"]) + 1],
+                        visible=False,
+                    ),
+                    yaxis=dict(title="Reason Description", autorange="reversed"),
+                    height=150,
+                    margin=dict(l=0, r=0, t=20, b=20),
+                )
+                fig = go.Figure(data=[trace], layout=layout)
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.info("### :grey[No Field Return]")
+        # endregion
+
+        # 각 분석 섹션 렌더링
+        st.markdown(
+            f"#### :material/analytics: **:grey[Production Analysis]**",
+        )
+        production_col = st.columns([0.5, 10], vertical_alignment="center")
+        with production_col[1]:
+            render_production_section(
+                selected_data["mcode"],
+                selected_data["start_date"],
+                selected_data["end_date"],
+                result_df,
+            )
+            render_ncf_section(
+                selected_data["mcode"],
+                selected_data["start_date"],
+                selected_data["end_date"],
+                result_df,
+            )
+            render_uf_section(
+                selected_data["mcode"],
+                selected_data["start_date"],
+                selected_data["end_date"],
+                result_df,
+            )
+            render_weight_section(
+                selected_data["mcode"],
+                selected_data["start_date"],
+                selected_data["end_date"],
+                result_df,
+            )
+            render_rr_section(
+                selected_data["mcode"],
+                selected_data["formatted_start_date"],
+                selected_data["formatted_end_date"],
+                result_df,
+            )
+            render_ctl_section(
+                selected_data["mcode"],
+                selected_data["start_date"],
+                selected_data["end_date"],
+                result_df,
+            )
+
     else:
-        # 선택된 행이 없는 경우 기본값 설정
         st.warning(
             "Please select a row from the assessment result table to view detailed analysis."
         )
 
 
-with main_tab[2]:
+def render_description_tab():
+    """Description 탭 렌더링"""
     st.title("Detail")
 
-    # product_assessment.md 파일을 직접 읽어서 마크다운으로 표시
     try:
         with open("_07_docs/product_assessment.md", "r", encoding="utf-8") as file:
             markdown_content = file.read()
@@ -313,3 +1000,74 @@ with main_tab[2]:
         st.error("product_assessment.md 파일을 찾을 수 없습니다.")
     except Exception as e:
         st.error(f"파일을 읽는 중 오류가 발생했습니다: {str(e)}")
+
+
+# =============================================================================
+# 상수 정의
+# =============================================================================
+# 품질 지수 계산을 위한 상수들
+
+QUALITY_INDICES_CONFIG = {
+    "ncf": {"max_rate": 20909, "min_rate": 1165, "multiplier": 1000000},
+    "uf": {"max_rate": 0.9948, "min_rate": 0.599},
+    "gt_weight": {"max_rate": 1.0, "min_rate": 0.9719},
+    "rr": {"max_rate": 0.999, "min_rate": 0.593},
+    "ctl": {"max_rate": 1.0, "min_rate": 0.857},
+}
+
+# UI 레이아웃 상수
+CTL_COLUMN_RATIO = [1, 3]  # CTL 섹션의 컬럼 비율
+
+
+# =============================================================================
+# 메인 페이지 UI 구성
+# =============================================================================
+# 커스텀 CSS 로드
+load_custom_css()
+
+st.title("OE Mass Production Assessment")
+main_tab = st.tabs(["Overview", "Detail", "Description"])
+
+# Assessment 결과 데이터 로드
+result_df = load_assessment_result()
+
+with main_tab[0]:
+    render_overview_tab(result_df)
+
+with main_tab[1]:
+    render_detail_tab(result_df)
+
+with main_tab[2]:
+    render_description_tab()
+
+
+def safe_data_loading(func, *args, **kwargs):
+    """
+    데이터 로딩 함수를 안전하게 실행하는 래퍼 함수
+
+    Args:
+        func: 실행할 데이터 로딩 함수
+        *args, **kwargs: 함수 인자들
+
+    Returns:
+        pd.DataFrame: 로딩된 데이터프레임 또는 빈 데이터프레임
+    """
+    try:
+        return func(*args, **kwargs)
+    except Exception as e:
+        st.error(f"데이터 로딩 중 오류 발생: {str(e)}")
+        return pd.DataFrame()
+
+
+def render_section_with_error_handling(section_func, *args, **kwargs):
+    """
+    섹션 렌더링 함수를 에러 처리와 함께 실행
+
+    Args:
+        section_func: 실행할 섹션 함수
+        *args, **kwargs: 함수 인자들
+    """
+    try:
+        section_func(*args, **kwargs)
+    except Exception as e:
+        st.error(f"섹션 렌더링 중 오류 발생: {str(e)}")

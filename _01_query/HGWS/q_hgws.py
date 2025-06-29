@@ -1,17 +1,18 @@
 from datetime import datetime
+from typing import Union
 
 
 def query_return_individual(
-    start_date: str | datetime | None = None,
-    end_date: str | datetime | None = None,
-    mcode: str | None = None,
-):
+    start_date: Union[str, datetime, None] = None,
+    end_date: Union[str, datetime, None] = None,
+    mcode: Union[str, list[str], None] = None,
+) -> str:
     """HGWS 반품 개별 조회 쿼리를 생성합니다.
 
     Args:
         start_date (str | datetime | None, optional): 시작일자 (YYYY-MM-DD 형식 또는 datetime 객체). Defaults to None.
         end_date (str | datetime | None, optional): 종료일자 (YYYY-MM-DD 형식 또는 datetime 객체). Defaults to None.
-        mcode (str | None, optional): 제품코드. Defaults to None.
+        mcode (str | list[str] | None, optional): 제품코드 또는 제품코드 리스트. Defaults to None.
 
     Returns:
         str: HGWS 반품 데이터 조회를 위한 SQL 쿼리
@@ -21,21 +22,29 @@ def query_return_individual(
         start_date = "2024-01-01"
     if end_date is None:
         end_date = datetime.now().strftime("%Y-%m-%d")
-    if mcode is None:
-        mcode = "*"
 
     # 날짜 형식을 YYYYMM으로 변환
-    if isinstance(start_date, datetime):
-        start_date = start_date.strftime("%Y%m")
-    elif isinstance(start_date, str):
-        # YYYY-MM-DD 형식을 YYYYMM으로 변환
-        start_date = start_date.replace("-", "")[:6]
+    def convert_to_yyyymm(date):
+        if isinstance(date, datetime):
+            return date.strftime("%Y%m")
+        elif isinstance(date, str):
+            return date.replace("-", "")[:6]
+        return date
 
-    if isinstance(end_date, datetime):
-        end_date = end_date.strftime("%Y%m")
-    elif isinstance(end_date, str):
-        # YYYY-MM-DD 형식을 YYYYMM으로 변환
-        end_date = end_date.replace("-", "")[:6]
+    start_date = convert_to_yyyymm(start_date)
+    end_date = convert_to_yyyymm(end_date)
+
+    # mcode 조건 처리
+    mcode_condition = ""
+    if mcode:
+        if isinstance(mcode, str):
+            mcode_condition = f"AND ZMATNR = '{mcode}'"
+        elif isinstance(mcode, list):
+            if all(isinstance(code, str) for code in mcode):
+                formatted_list = ", ".join(f"'{code}'" for code in mcode)
+            else:
+                formatted_list = ", ".join(f"'{str(code)}'" for code in mcode)
+            mcode_condition = f"AND ZMATNR IN ({formatted_list})"
 
     query = f"""--sql
         SELECT
@@ -60,7 +69,7 @@ def query_return_individual(
         AND ZRULT NOT IN ('R')
         AND SPMON >= '{start_date}'
         AND SPMON <= '{end_date}'
-        {f"AND ZMATNR = '{mcode}'" if mcode != "*" else ""}
+        {mcode_condition}
         GROUP BY WERKS, ZMATNR, ZCLS3T, ZCLS4T, ZNAME
         ORDER BY "Return cnt" DESC;
     """

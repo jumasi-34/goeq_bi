@@ -2,7 +2,7 @@ from _00_database.db_client import get_client
 from _01_query.HGWS import q_hgws
 
 
-def get_hgws_df(m_code, start_date, end_date):
+def get_hgws_df(m_code, start_date=None, end_date=None):
     query = q_hgws.query_return_individual(
         mcode=m_code, start_date=start_date, end_date=end_date
     )

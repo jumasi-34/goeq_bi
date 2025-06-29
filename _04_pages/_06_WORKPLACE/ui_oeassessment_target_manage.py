@@ -53,13 +53,37 @@ col_config = {
         max_value=100,
     ),
 }
+
+remain_col = [
+    "M_CODE",
+    "M_CODE_RR",
+    "PLANT",
+    "M_CODE_PAIR",
+    "F_S",
+    "OEM",
+    "Vehicle",
+    "START_MASS_PRODUCTION",
+    "Spec_release",
+    "R-Level ",
+    "Approval Doc",
+    "U/F 기준등록",
+    "IQM 등록",
+    "OE Application ",
+    "AI_SPEC",
+    "AI_Weight",
+    "AI_RRC",
+    "Master tire",
+    "RRIS 등록",
+]
+
 edited_df = st.data_editor(
-    df_for_edit,
+    df_for_edit[remain_col],
     num_rows="dynamic",
     use_container_width=True,
     key=st.session_state.editor_key,  # 매번 새로운 key 사용
     column_config=col_config,
 )
+st.text(edited_df.columns)
 
 # 저장 버튼에서만 세션 상태와 DB 갱신
 if st.button("Save Changes"):
