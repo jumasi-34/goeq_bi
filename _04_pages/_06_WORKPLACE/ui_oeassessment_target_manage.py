@@ -78,6 +78,7 @@ with tab1:
         use_container_width=True,
         key=st.session_state.target_editor_key,
         column_config=target_col_config,
+        hide_index=False,
     )
 
     # 저장 버튼에서만 세션 상태와 DB 갱신
