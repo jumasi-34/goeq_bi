@@ -29,6 +29,16 @@ if "editor_key" not in st.session_state:
 
 # 데이터프레임 편집기 표시
 col_config = {
+    "No": st.column_config.NumberColumn(
+        "No",
+        help="No",
+        required=True,
+    ),
+    "Year": st.column_config.NumberColumn(
+        "Year",
+        help="Year",
+        required=True,
+    ),
     "PLANT": st.column_config.TextColumn(
         "Plant",
         help="공장 코드",
@@ -55,6 +65,8 @@ col_config = {
 }
 
 remain_col = [
+    "No",
+    "Year",
     "M_CODE",
     "M_CODE_RR",
     "PLANT",
