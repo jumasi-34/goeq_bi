@@ -177,7 +177,7 @@ def collect_uf_data(mcode: str, date_range: DateRange) -> pd.DataFrame:
         return (
             uf_df.groupby(["m_code"])
             .agg(
-                uf_pass_rate=("pass_rate", "mean"),  # 평균 합격률
+                uf_pass_rate=("uf_pass_rate", "mean"),  # 평균 합격률
                 uf_ins_qty=("uf_ins_qty", "sum"),  # 총 검사 수량
                 uf_pass_qty=("uf_pass_qty", "sum"),  # 총 합격 수량
             )
