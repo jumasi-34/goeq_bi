@@ -88,6 +88,10 @@ def get_date_range(start_date: datetime) -> DateRange:
     Returns:
         DateRange: 계산된 날짜 범위
     """
+    # None, NaT, 또는 유효하지 않은 날짜 처리
+    if start_date is None or pd.isna(start_date):
+        raise ValueError("시작 날짜가 None이거나 유효하지 않습니다.")
+
     end_date = start_date + timedelta(days=180)
     start_date_str = start_date.strftime("%Y-%m-%d")
     end_date_str = end_date.strftime("%Y-%m-%d")
@@ -380,7 +384,25 @@ def process_single_mcode(target_df: pd.DataFrame, row: pd.Series) -> pd.DataFram
     """단일 M-code에 대한 데이터를 처리합니다."""
     mcode = row["M_CODE"]
     mcode_rr = row["M_CODE_RR"]
-    date_range = get_date_range(pd.to_datetime(row["START_MASS_PRODUCTION"]))
+
+    # START_MASS_PRODUCTION 값 검증
+    start_mass_production = row["START_MASS_PRODUCTION"]
+    if pd.isna(start_mass_production) or start_mass_production is None:
+        st.warning(f"START_MASS_PRODUCTION 값이 없습니다. M-code: {mcode}")
+        return pd.DataFrame()
+
+    try:
+        start_date = pd.to_datetime(start_mass_production)
+        if pd.isna(start_date):
+            st.warning(
+                f"START_MASS_PRODUCTION 날짜 변환 실패. M-code: {mcode}, 값: {start_mass_production}"
+            )
+            return pd.DataFrame()
+
+        date_range = get_date_range(start_date)
+    except Exception as e:
+        st.error(f"날짜 범위 계산 중 오류 발생. M-code: {mcode}, 오류: {str(e)}")
+        return pd.DataFrame()
 
     try:
         # 현재 처리 중인 m_code의 행만 선택

@@ -69,7 +69,7 @@ def run_product_assessment_aggregation():
         progress_bar = st.progress(0)
         status_text = st.empty()
 
-        status_text.text("제품 평가 데이터를 수집하는 중...")
+        status_text.text("Collecting product assessment data...")
         progress_bar.progress(20)
 
         run_product_assessment()
