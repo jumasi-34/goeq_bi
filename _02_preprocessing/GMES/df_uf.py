@@ -67,14 +67,23 @@ def calculate_uf_pass_rate(mcode: str, start_date: str, end_date: str) -> pd.Dat
             df.loc[mask, "uf_pass_qty"] = df.loc[mask, cols].sum(axis=1)
 
         # 합격률 계산 (0으로 나누기 방지)
-        df["pass_rate"] = df.apply(
+        df["uf_pass_rate"] = df.apply(
             lambda x: x["uf_pass_qty"] / x["uf_ins_qty"] if x["uf_ins_qty"] > 0 else 0,
             axis=1,
         )
 
         # 결과 컬럼만 반환
         return (
-            df[["m_code", "plant", "spec_cd", "uf_ins_qty", "uf_pass_qty", "pass_rate"]]
+            df[
+                [
+                    "m_code",
+                    "plant",
+                    "spec_cd",
+                    "uf_ins_qty",
+                    "uf_pass_qty",
+                    "uf_pass_rate",
+                ]
+            ]
             .dropna()
             .reset_index(drop=True)
         )
