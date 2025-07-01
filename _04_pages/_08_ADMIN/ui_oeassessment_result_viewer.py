@@ -16,6 +16,7 @@ OE Assessment 결과 조회 페이지
 # =============================================================================
 # Import Libraries
 # =============================================================================
+import importlib
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
@@ -24,10 +25,7 @@ import plotly.graph_objects as go
 from _00_database.db_client import get_client
 
 # GMES Data Processing
-from _02_preprocessing.GMES.df_ctl import (
-    get_ctl_raw_individual_df,
-    get_groupby_doc_ctl_df,
-)
+from _02_preprocessing.GMES import df_ctl
 from _02_preprocessing.GMES.df_production import get_daily_production_df
 from _02_preprocessing.GMES.df_ncf import get_ncf_monthly_df, get_ncf_by_dft_cd
 from _02_preprocessing.GMES.df_uf import (
@@ -50,6 +48,10 @@ from _02_preprocessing.HOPE.df_oeapp import load_oeapp_df_by_mcode
 from _03_visualization._08_ADMIN import viz_oeassessment_result_viewer as viz
 from _03_visualization import config_plotly
 from _05_commons.css_style_config import load_custom_css
+from _05_commons import config
+
+if config.DEV_MODE:
+    importlib.reload(df_ctl)
 
 # =============================================================================
 # CSS Styles
@@ -130,9 +132,8 @@ def calculate_quality_indices(result_df):
         result_df (pd.DataFrame): 원본 Assessment 결과 데이터프레임
             - ncf_qty: 부적합 수량
             - total_qty: 총 수량
-            - pass_rate: UF 합격률
-            - wt_pass_qty: 중량 합격 수량
-            - wt_ins_qty: 중량 검사 수량
+            - uf_pass_rate: UF 합격률
+            - gt_wt_pass_rate: GT weight 합격률
             - rr_pass_rate_pdf: RR 합격률
             - ctl_pass_rate: CTL 합격률
 
@@ -183,11 +184,11 @@ def calculate_quality_indices(result_df):
 
     # UF 지수 계산
     result_df["uf_idx"] = calculate_index(
-        result_df["pass_rate"], QUALITY_INDICES_CONFIG["uf"]
+        result_df["uf_pass_rate"], QUALITY_INDICES_CONFIG["uf"]
     )
 
     # GT Weight 지수 계산
-    result_df["gt_rate"] = result_df["wt_pass_qty"] / result_df["wt_ins_qty"]
+    result_df["gt_rate"] = result_df["gt_wt_pass_rate"]
     result_df["gt_idx"] = calculate_index(
         result_df["gt_rate"], QUALITY_INDICES_CONFIG["gt_weight"]
     )
@@ -381,9 +382,9 @@ def render_uf_section(
     selected_mcode, selected_start_date, selected_end_date, result_df
 ):
     """UF 분석 섹션 렌더링"""
-    uf_pass_rate = (
-        result_df[result_df["m_code"] == selected_mcode]["pass_rate"].values[0] * 100
-    )
+    uf_pass_rate = result_df[result_df["m_code"] == selected_mcode][
+        "uf_pass_rate"
+    ].values[0]
     uf_idx = result_df[result_df["m_code"] == selected_mcode]["uf_idx"].values[0]
 
     # 3단계 상태 평가 (UF Pass Rate는 높을수록 좋음 - reverse=False)
@@ -425,9 +426,9 @@ def render_weight_section(
     selected_mcode, selected_start_date, selected_end_date, result_df
 ):
     """중량 분석 섹션 렌더링"""
-    wt_pass_rate = (
-        result_df[result_df["m_code"] == selected_mcode]["gt_rate"].values[0] * 100
-    )
+    wt_pass_rate = result_df[result_df["m_code"] == selected_mcode][
+        "gt_wt_pass_rate"
+    ].values[0]
     wt_idx = result_df[result_df["m_code"] == selected_mcode]["gt_idx"].values[0]
 
     # 3단계 상태 평가 (Weight Pass Rate는 높을수록 좋음 - reverse=False)
@@ -478,10 +479,9 @@ def render_rr_section(
     selected_mcode, formatted_start_date, formatted_end_date, result_df
 ):
     """RR 분석 섹션 렌더링"""
-    rr_pass_rate = (
-        result_df[result_df["m_code"] == selected_mcode]["rr_pass_rate_pdf"].values[0]
-        * 100
-    )
+    rr_pass_rate = result_df[result_df["m_code"] == selected_mcode][
+        "rr_pass_rate_pdf"
+    ].values[0]
     rr_idx = result_df[result_df["m_code"] == selected_mcode]["rr_idx"].values[0]
 
     # 3단계 상태 평가 (RR Pass Rate는 높을수록 좋음 - reverse=False)
@@ -525,44 +525,148 @@ def render_ctl_section(
     selected_mcode, selected_start_date, selected_end_date, result_df
 ):
     """CTL 분석 섹션 렌더링"""
-    ctl_pass_rate = (
-        result_df[result_df["m_code"] == selected_mcode]["ctl_pass_rate"].values[0]
-        * 100
-    )
+    ctl_pass_rate = result_df[result_df["m_code"] == selected_mcode][
+        "ctl_pass_rate"
+    ].values[0]
     ctl_idx = result_df[result_df["m_code"] == selected_mcode]["ctl_idx"].values[0]
 
-    # 3단계 상태 평가 (CTL Pass Rate는 높을수록 좋음 - reverse=False)
     status_text, status_level = get_quality_status_indicator(ctl_idx)
 
-    # 상태 표시 텍스트 생성 (색상 적용)
     with st.expander(
         f"CTL Pass Rate : {ctl_pass_rate:,.1f} % | **:{status_level}[{status_text} - {ctl_idx:,.0f}p]**",
         expanded=False,
         icon=":material/straighten:",
     ):
-        # 상태에 따른 배경색 변경을 위한 컨테이너
 
-        ctl_col = st.columns([1, 3])
-
-        ctl_raw_data = get_ctl_raw_individual_df(
+        ctl_raw_data = df_ctl.get_ctl_raw_individual_df(
             mcode=selected_mcode,
             start_date=selected_start_date,
             end_date=selected_end_date,
         )
-
+        ctl_raw_data["JDG"] = pd.Categorical(
+            ctl_raw_data["JDG"], categories=["OK", "NI", "NO"]
+        )
+        ctl_col = st.columns(3, vertical_alignment="center", gap="large")
         if len(ctl_raw_data) > 0:
-            grouped_ctl_df = get_groupby_doc_ctl_df(
+            grouped_ctl_df = df_ctl.get_groupby_doc_ctl_df(
                 mcode=selected_mcode,
                 start_date=selected_start_date,
                 end_date=selected_end_date,
             )
-
             ctl_col[0].plotly_chart(
                 viz.draw_ctl_trend(grouped_ctl_df), use_container_width=True
             )
-            ctl_col[1].plotly_chart(
-                viz.draw_ctl_detail(ctl_raw_data), use_container_width=True
+            MRM_PASS_RATE = (
+                ctl_raw_data.pivot_table(
+                    index="MRM_ITEM",
+                    columns="JDG",
+                    values="DOC_NO",
+                    aggfunc="count",
+                )
+                .reset_index()
+                .fillna(0)
             )
+            MRM_PASS_RATE["PASS_RATE"] = MRM_PASS_RATE["OK"] / (
+                MRM_PASS_RATE["NI"] + MRM_PASS_RATE["OK"]
+            )
+            NO_MRM_ITEMS = MRM_PASS_RATE[MRM_PASS_RATE["PASS_RATE"].isna()][
+                "MRM_ITEM"
+            ].tolist()
+            MRM_ITEMS = MRM_PASS_RATE[~MRM_PASS_RATE["PASS_RATE"].isna()][
+                "MRM_ITEM"
+            ].tolist()
+
+            MRM_PASS_RATE = MRM_PASS_RATE[~MRM_PASS_RATE["MRM_ITEM"].isin(NO_MRM_ITEMS)]
+
+            # Pass Rate가 0-1 범위이므로 가독성을 위해 퍼센트로 변환
+            pass_rate_pct = MRM_PASS_RATE["PASS_RATE"] * 100
+
+            # N/A 값 처리 (0으로 나누기 등으로 인한 NaN)
+            pass_rate_pct = pass_rate_pct.fillna(0)
+
+            # 가로 막대 차트로 변경 (항목명이 길 수 있으므로)
+            trace = go.Bar(
+                x=MRM_PASS_RATE["MRM_ITEM"],  # y축에 항목명
+                y=pass_rate_pct,  # x축에 합격률
+                marker=dict(
+                    color=config_plotly.GRAY_CLR,
+                ),
+                text=[f"{rate:.0f}%" for rate in pass_rate_pct],  # 값 표시
+                textposition="auto",
+            )
+
+            layout = go.Layout(
+                title="Pass Rate by Measurement Items",
+                xaxis=dict(
+                    title="Pass Rate (%)",
+                ),  # 0-100% 범위 고정
+                yaxis=dict(title="Measurement Items", range=[0, 100]),
+                height=400,  # 가로 막대는 높이를 늘려서 가독성 향상
+            )
+
+            fig = go.Figure(data=trace, layout=layout)
+            ctl_col[1].plotly_chart(fig)
+            ctl_col[1].markdown(f"**No Measurement Items** : {', '.join(NO_MRM_ITEMS)}")
+
+            selected_mrm_item = ctl_col[2].selectbox(
+                "Select Measurement Item",
+                options=MRM_ITEMS,
+                index=0,
+            )
+            if selected_mrm_item:
+                ctl_raw_data = ctl_raw_data[
+                    ctl_raw_data["MRM_ITEM"] == selected_mrm_item
+                ]
+                UPPER = ctl_raw_data[ctl_raw_data["SIDE"] == "UPPER"]
+                LOWER = ctl_raw_data[ctl_raw_data["SIDE"] == "LOWER"]
+
+                trace1 = go.Scatter(
+                    x=UPPER["MRM_DATE"],
+                    y=UPPER["ACTUAL"],
+                    text=UPPER["ACTUAL"],
+                    mode="markers",
+                    marker=dict(color=config_plotly.multi_color_lst[0]),
+                    name="UPPER",
+                    legendgroup="UPPER",
+                )
+
+                trace2 = go.Scatter(
+                    x=LOWER["MRM_DATE"],
+                    y=LOWER["ACTUAL"],
+                    text=LOWER["ACTUAL"],
+                    mode="markers",
+                    marker=dict(color=config_plotly.multi_color_lst[1]),
+                    name="LOWER",
+                    legendgroup="LOWER",
+                )
+                # 전체 레이아웃 설정
+                layout = go.Layout(
+                    title="CTL Trend",
+                    height=300,
+                    legend=dict(
+                        orientation="h", y=1.1, yanchor="bottom", x=1, xanchor="right"
+                    ),
+                )
+                fig = go.Figure(data=[trace1, trace2], layout=layout)
+                if "UL" in UPPER.columns and not pd.isna(UPPER["UL"].values[0]):
+                    fig.add_hline(
+                        y=UPPER["UL"].values[0],
+                        line=dict(
+                            color=config_plotly.NEGATIVE_CLR, dash="dot", width=1
+                        ),
+                    )
+                if "LL" in UPPER.columns and not pd.isna(UPPER["LL"].values[0]):
+                    fig.add_hline(
+                        y=UPPER["LL"].values[0],
+                        line=dict(
+                            color=config_plotly.NEGATIVE_CLR, dash="dot", width=1
+                        ),
+                    )
+                # X축을 카테고리 타입으로 설정
+                fig.update_xaxes(type="category")
+                # Y축 그리드 제거
+                fig.update_yaxes(showgrid=False)
+                ctl_col[2].plotly_chart(fig)
         else:
             st.warning("No CTL data found")
 
@@ -578,10 +682,11 @@ def render_detail_tab(result_df):
 
         # 품질 지수 계산
         result_df = calculate_quality_indices(result_df)
-        result_df[["pass_rate", "gt_rate", "rr_pass_rate_pdf", "ctl_pass_rate"]] = (
-            result_df[["pass_rate", "gt_rate", "rr_pass_rate_pdf", "ctl_pass_rate"]]
-            * 100
-        )
+        result_df["uf_pass_rate"] = result_df["uf_pass_rate"] * 100
+        result_df["gt_wt_pass_rate"] = result_df["gt_wt_pass_rate"] * 100
+        result_df["rr_pass_rate_pdf"] = result_df["rr_pass_rate_pdf"] * 100
+        result_df["ctl_pass_rate"] = result_df["ctl_pass_rate"] * 100
+
         mcode_list = result_df["m_code"].tolist()
         unified_cqms_df = get_cqms_unified_df(m_code=mcode_list)
         unified_cqms_df = unified_cqms_df.pivot_table(
@@ -618,22 +723,17 @@ def render_detail_tab(result_df):
         if show_full_table:
             remain_columns = [
                 "m_code",
-                "plant_x",
+                "plant",
                 "min_date",
                 "max_date",
                 "total_qty",
                 "ncf_qty",
                 "ncf_rate",
                 "ncf_idx",
-                "uf_ins_qty",
-                "uf_pass_qty",
-                "pass_rate",
+                "uf_pass_rate",
                 "uf_idx",
-                "wt_ins_qty",
-                "wt_pass_qty",
-                "gt_rate",
+                "gt_wt_pass_rate",
                 "gt_idx",
-                "count",
                 "rr_pass_rate_pdf",
                 "rr_idx",
                 "ctl_pass_rate",
@@ -646,7 +746,7 @@ def render_detail_tab(result_df):
         else:
             remain_columns = [
                 "m_code",
-                "plant_x",
+                "plant",
                 "min_date",
                 "max_date",
                 "total_qty",
@@ -660,6 +760,9 @@ def render_detail_tab(result_df):
                 "Audit",
                 "Field Return",
             ]
+
+        # 존재하는 컬럼만 필터링
+        remain_columns = [col for col in remain_columns if col in result_df.columns]
 
         # pandas 스타일링 적용
         styled_df = (
@@ -681,7 +784,7 @@ def render_detail_tab(result_df):
 
         column_config = {
             "m_code": st.column_config.TextColumn("M-Code", width="small"),
-            "plant_x": st.column_config.TextColumn("Plant", width="small"),
+            "plant": st.column_config.TextColumn("Plant", width="small"),
             "min_date": st.column_config.TextColumn(
                 "Start",
                 help="Mass Production Start Date",
@@ -702,21 +805,16 @@ def render_detail_tab(result_df):
             "ncf_idx": st.column_config.NumberColumn(
                 "NCF Index", width="small", format="%.0f"
             ),
-            "uf_ins_qty": st.column_config.NumberColumn("UF Insp Qty", format="%.0f"),
-            "uf_pass_qty": st.column_config.NumberColumn("UF Pass Qty", format="%.0f"),
-            "pass_rate": st.column_config.NumberColumn("UF(%)", format="%.1f%%"),
+            "uf_pass_rate": st.column_config.NumberColumn("UF(%)", format="%.1f%%"),
             "uf_idx": st.column_config.NumberColumn(
                 "UF Index", width="small", format="%.0f"
             ),
-            "wt_ins_qty": st.column_config.NumberColumn("WT Insp Qty", format="%.0f"),
-            "wt_pass_qty": st.column_config.NumberColumn("WT Pass Qty", format="%.0f"),
-            "gt_rate": st.column_config.NumberColumn(
+            "gt_wt_pass_rate": st.column_config.NumberColumn(
                 "GT(%)", width="small", format="%.1f%%"
             ),
             "gt_idx": st.column_config.NumberColumn(
                 "GT Index", width="small", format="%.0f"
             ),
-            "count": st.column_config.NumberColumn("RR Insp Qty", format="%.0f"),
             "rr_pass_rate_pdf": st.column_config.NumberColumn(
                 "RR(%)", width="small", format="%.1f%%"
             ),
@@ -875,7 +973,7 @@ def render_detail_tab(result_df):
 
         metric_col = st.columns([0.5, 6, 4], vertical_alignment="center")
         cqms_unified_df = get_cqms_unified_df(m_code=selected_data["mcode"])
-        cqms_unified_df = (
+        groupby_cqms_unified_df = (
             cqms_unified_df.groupby("CATEGORY")
             .agg(Count=("CATEGORY", "count"))
             .reset_index()
@@ -887,27 +985,27 @@ def render_detail_tab(result_df):
             cqms_col[0].metric(
                 label="Quality Issue",
                 value=(
-                    cqms_unified_df[cqms_unified_df["CATEGORY"] == "Quality Issue"][
-                        "Count"
-                    ].values[0]
+                    groupby_cqms_unified_df[
+                        groupby_cqms_unified_df["CATEGORY"] == "Quality Issue"
+                    ]["Count"].values[0]
                 ),
                 delta=None,
             )
             cqms_col[1].metric(
                 label="4M Change",
                 value=(
-                    cqms_unified_df[cqms_unified_df["CATEGORY"] == "4M Change"][
-                        "Count"
-                    ].values[0]
+                    groupby_cqms_unified_df[
+                        groupby_cqms_unified_df["CATEGORY"] == "4M Change"
+                    ]["Count"].values[0]
                 ),
                 delta=None,
             )
             cqms_col[2].metric(
                 label="Audit",
                 value=(
-                    cqms_unified_df[cqms_unified_df["CATEGORY"] == "Audit"][
-                        "Count"
-                    ].values[0]
+                    groupby_cqms_unified_df[
+                        groupby_cqms_unified_df["CATEGORY"] == "Audit"
+                    ]["Count"].values[0]
                 ),
                 delta=None,
             )
@@ -935,6 +1033,16 @@ def render_detail_tab(result_df):
                 )
                 fig = go.Figure(data=[trace], layout=layout)
                 st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.info("### :grey[No Field Return]")
+        oem_event_col_detail = st.columns([0.5, 10], vertical_alignment="center")
+        with oem_event_col_detail[1].expander("Detail", expanded=False):
+            if len(cqms_unified_df) > 0:
+                st.dataframe(cqms_unified_df, use_container_width=True, hide_index=True)
+            else:
+                st.info("### :grey[No OEM Event]")
+            if len(hgws_df) > 0:
+                st.dataframe(hgws_df, use_container_width=True, hide_index=True)
             else:
                 st.info("### :grey[No Field Return]")
         # endregion

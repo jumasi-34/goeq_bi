@@ -40,6 +40,12 @@ CTMS_MRM_ITEM = (
     "BFH",
     "I/P",
     "TShG.C+y",
+    "RCG",
+    "BRG",
+    "1TUAH",
+    "2TUAH",
+    "TBG.R±y",
+    "CTEP.D",
 )
 
 
