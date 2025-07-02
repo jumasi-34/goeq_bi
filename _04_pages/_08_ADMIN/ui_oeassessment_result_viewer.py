@@ -17,6 +17,10 @@ OE Assessment 결과 조회 페이지
 # Import Libraries
 # =============================================================================
 import importlib
+import logging
+from datetime import datetime
+from functools import wraps
+from typing import Dict, List, Optional, Tuple, Union, Any, Callable
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
@@ -54,30 +58,245 @@ if config.DEV_MODE:
     importlib.reload(df_ctl)
 
 # =============================================================================
+# 로깅 설정
+# =============================================================================
+# 로깅 설정
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[
+        logging.FileHandler(
+            f'logs/oeassessment_{datetime.now().strftime("%Y%m%d")}.log'
+        ),
+        logging.StreamHandler(),
+    ],
+)
+
+logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# 에러 처리 데코레이터
+# =============================================================================
+def handle_data_loading_errors(
+    func: Callable[..., pd.DataFrame],
+) -> Callable[..., pd.DataFrame]:
+    """
+    데이터 로딩 함수 에러 처리 데코레이터
+
+    Args:
+        func: 실행할 데이터 로딩 함수
+
+    Returns:
+        에러 처리가 적용된 함수
+    """
+
+    @wraps(func)
+    def wrapper(*args: Any, **kwargs: Any) -> pd.DataFrame:
+        try:
+            logger.info(f"데이터 로딩 시작: {func.__name__}")
+            result = func(*args, **kwargs)
+            logger.info(f"데이터 로딩 완료: {func.__name__} - {len(result)} 행")
+            return result
+        except Exception as e:
+            logger.error(f"데이터 로딩 중 오류 발생: {func.__name__} - {str(e)}")
+            st.error(f"데이터 로딩 중 오류 발생: {str(e)}")
+            return pd.DataFrame()
+
+    return wrapper
+
+
+def handle_section_rendering_errors(func: Callable[..., None]) -> Callable[..., None]:
+    """
+    섹션 렌더링 함수 에러 처리 데코레이터
+
+    Args:
+        func: 실행할 섹션 함수
+
+    Returns:
+        에러 처리가 적용된 함수
+    """
+
+    @wraps(func)
+    def wrapper(*args: Any, **kwargs: Any) -> None:
+        try:
+            logger.info(f"섹션 렌더링 시작: {func.__name__}")
+            func(*args, **kwargs)
+            logger.info(f"섹션 렌더링 완료: {func.__name__}")
+        except Exception as e:
+            logger.error(f"섹션 렌더링 중 오류 발생: {func.__name__} - {str(e)}")
+            st.error(f"섹션 렌더링 중 오류 발생: {str(e)}")
+
+    return wrapper
+
+
+def handle_data_processing_errors(
+    func: Callable[..., pd.DataFrame],
+) -> Callable[..., pd.DataFrame]:
+    """
+    데이터 처리 함수 에러 처리 데코레이터
+
+    Args:
+        func: 실행할 데이터 처리 함수
+
+    Returns:
+        에러 처리가 적용된 함수
+    """
+
+    @wraps(func)
+    def wrapper(*args: Any, **kwargs: Any) -> pd.DataFrame:
+        try:
+            logger.info(f"데이터 처리 시작: {func.__name__}")
+            result = func(*args, **kwargs)
+            logger.info(f"데이터 처리 완료: {func.__name__}")
+            return result
+        except Exception as e:
+            logger.error(f"데이터 처리 중 오류 발생: {func.__name__} - {str(e)}")
+            st.error(f"데이터 처리 중 오류 발생: {str(e)}")
+            return pd.DataFrame()
+
+    return wrapper
+
+
+def handle_ui_rendering_errors(func: Callable[..., None]) -> Callable[..., None]:
+    """
+    UI 렌더링 함수 에러 처리 데코레이터
+
+    Args:
+        func: 실행할 UI 렌더링 함수
+
+    Returns:
+        에러 처리가 적용된 함수
+    """
+
+    @wraps(func)
+    def wrapper(*args: Any, **kwargs: Any) -> None:
+        try:
+            logger.info(f"UI 렌더링 시작: {func.__name__}")
+            func(*args, **kwargs)
+            logger.info(f"UI 렌더링 완료: {func.__name__}")
+        except Exception as e:
+            logger.error(f"UI 렌더링 중 오류 발생: {func.__name__} - {str(e)}")
+            st.error(f"UI 렌더링 중 오류 발생: {str(e)}")
+
+    return wrapper
+
+
+# =============================================================================
+# 상수 정의
+# =============================================================================
+# 품질 지수 계산을 위한 상수들
+QUALITY_INDICES_CONFIG: Dict[str, Dict[str, Union[int, float]]] = {
+    "ncf": {"max_rate": 20909, "min_rate": 1165, "multiplier": 1000000},
+    "uf": {"max_rate": 0.9948, "min_rate": 0.599},
+    "gt_weight": {"max_rate": 1.0, "min_rate": 0.9719},
+    "rr": {"max_rate": 0.999, "min_rate": 0.593},
+    "ctl": {"max_rate": 1.0, "min_rate": 0.857},
+}
+
+# UI 레이아웃 상수
+UI_CONFIG: Dict[str, Any] = {
+    "column_ratios": {
+        "ctl": [1, 3],
+        "metric": [0.5, 6, 4],
+        "project_info": [0.5, 10],
+        "oem_event_detail": [0.5, 10],
+        "production_analysis": [0.5, 10],
+    },
+    "status_thresholds": {
+        "excellent": 80,
+        "warning": 50,
+    },
+    "table_columns": {
+        "full": [
+            "m_code",
+            "plant",
+            "min_date",
+            "max_date",
+            "total_qty",
+            "ncf_qty",
+            "ncf_rate",
+            "ncf_idx",
+            "uf_pass_rate",
+            "uf_idx",
+            "gt_wt_pass_rate",
+            "gt_idx",
+            "rr_pass_rate_pdf",
+            "rr_idx",
+            "ctl_pass_rate",
+            "ctl_idx",
+            "Quality Issue",
+            "4M Change",
+            "Audit",
+            "Field Return",
+        ],
+        "summary": [
+            "m_code",
+            "plant",
+            "min_date",
+            "max_date",
+            "total_qty",
+            "ncf_idx",
+            "uf_idx",
+            "gt_idx",
+            "rr_idx",
+            "ctl_idx",
+            "Quality Issue",
+            "4M Change",
+            "Audit",
+            "Field Return",
+        ],
+    },
+}
+
+# =============================================================================
 # CSS Styles
 # =============================================================================
 load_custom_css()
 
 
 # =============================================================================
+# 연도 선택
+# =============================================================================
+with st.sidebar:
+    year_select = st.pills(
+        "Select Year",
+        options=["2024", "2025"],
+        default="2025",
+    )
+
+    year_select = int(year_select)
+
+
+# =============================================================================
 # Utility Functions
 # =============================================================================
-def remove_outliers(group):
+def remove_outliers(group: pd.DataFrame) -> pd.DataFrame:
     """
     IQR 방법을 사용하여 그룹별 아웃라이어를 제거하는 함수
 
     Args:
-        group (pd.DataFrame): 중량 데이터 그룹
+        group: 중량 데이터 그룹
 
     Returns:
-        pd.DataFrame: 아웃라이어가 제거된 데이터프레임
+        아웃라이어가 제거된 데이터프레임
 
     계산 방법:
         - Q1 (25% 분위수)와 Q3 (75% 분위수) 계산
         - IQR = Q3 - Q1
         - 하한 = Q1 - 1.5 * IQR
         - 상한 = Q3 + 1.5 * IQR
+
+    Raises:
+        KeyError: 'MRM_WGT' 컬럼이 없는 경우
+        ValueError: 데이터가 비어있는 경우
     """
+    if group.empty:
+        raise ValueError("입력 데이터가 비어있습니다.")
+
+    if "MRM_WGT" not in group.columns:
+        raise KeyError("'MRM_WGT' 컬럼이 데이터프레임에 없습니다.")
+
     Q1 = group["MRM_WGT"].quantile(0.25)
     Q3 = group["MRM_WGT"].quantile(0.75)
     IQR = Q3 - Q1
@@ -86,7 +305,22 @@ def remove_outliers(group):
     return group[(group["MRM_WGT"] >= lower_bound) & (group["MRM_WGT"] <= upper_bound)]
 
 
-def multi_condition_style(val):
+def multi_condition_style(val: Union[float, int]) -> str:
+    """
+    품질 지수 값에 따른 조건부 스타일링을 적용하는 함수
+
+    Args:
+        val: 스타일링할 값
+
+    Returns:
+        CSS 스타일 문자열
+
+    스타일 규칙:
+        - NaN 또는 0: 검은색
+        - > 80: 긍정적 색상 (파란색)
+        - > 50: 경고 색상 (주황색)
+        - > 0: 부정적 색상 (빨간색)
+    """
     if pd.isna(val) or val == 0:
         return "color: black"
     elif val > 80:
@@ -102,13 +336,34 @@ def multi_condition_style(val):
 # =============================================================================
 # Data Loading
 # =============================================================================
-def load_assessment_result():
-    """Assessment 결과 데이터를 SQLite 데이터베이스에서 로드"""
+@handle_data_loading_errors
+def load_assessment_result() -> pd.DataFrame:
+    """
+    Assessment 결과 데이터를 SQLite 데이터베이스에서 로드
+
+    Returns:
+        Assessment 결과 데이터프레임
+
+    Raises:
+        Exception: 데이터베이스 연결 또는 쿼리 실행 중 오류 발생 시
+    """
     return get_client("sqlite").execute("SELECT * FROM mass_assess_result")
 
 
-def load_sellin_data(mcode):
-    """판매 데이터를 SQLite 데이터베이스에서 로드"""
+@handle_data_loading_errors
+def load_sellin_data(mcode: str) -> pd.DataFrame:
+    """
+    판매 데이터를 SQLite 데이터베이스에서 로드
+
+    Args:
+        mcode: 모델 코드
+
+    Returns:
+        판매 데이터 데이터프레임
+
+    Raises:
+        Exception: 데이터베이스 연결 또는 쿼리 실행 중 오류 발생 시
+    """
     return get_client("sqlite").execute(
         f"SELECT * FROM sellin_monthly_agg WHERE M_CODE = '{mcode}'"
     )
@@ -117,7 +372,8 @@ def load_sellin_data(mcode):
 # =============================================================================
 # 데이터 처리 함수들
 # =============================================================================
-def calculate_quality_indices(result_df):
+@handle_data_processing_errors
+def calculate_quality_indices(result_df: pd.DataFrame) -> pd.DataFrame:
     """
     Assessment 결과에 품질 지수들을 계산하여 추가합니다.
 
@@ -129,7 +385,7 @@ def calculate_quality_indices(result_df):
     - CTL Index: Control 합격률 기반 지수 (0-100)
 
     Args:
-        result_df (pd.DataFrame): 원본 Assessment 결과 데이터프레임
+        result_df: 원본 Assessment 결과 데이터프레임
             - ncf_qty: 부적합 수량
             - total_qty: 총 수량
             - uf_pass_rate: UF 합격률
@@ -138,7 +394,7 @@ def calculate_quality_indices(result_df):
             - ctl_pass_rate: CTL 합격률
 
     Returns:
-        pd.DataFrame: 품질 지수가 추가된 데이터프레임
+        품질 지수가 추가된 데이터프레임
             - ncf_rate: NCF 비율 (ppm)
             - ncf_idx: NCF 지수 (0-100)
             - uf_idx: UF 지수 (0-100)
@@ -146,19 +402,41 @@ def calculate_quality_indices(result_df):
             - gt_idx: GT Weight 지수 (0-100)
             - rr_idx: RR 지수 (0-100)
             - ctl_idx: CTL 지수 (0-100)
-    """
 
-    def calculate_index(rate, config, reverse=False):
+    Raises:
+        ValueError: 필수 컬럼이 없는 경우
+        ZeroDivisionError: total_qty가 0인 경우
+    """
+    # 필수 컬럼 검증
+    required_columns = [
+        "ncf_qty",
+        "total_qty",
+        "uf_pass_rate",
+        "gt_wt_pass_rate",
+        "rr_pass_rate_pdf",
+        "ctl_pass_rate",
+    ]
+    missing_columns = [col for col in required_columns if col not in result_df.columns]
+    if missing_columns:
+        raise ValueError(f"필수 컬럼이 없습니다: {missing_columns}")
+
+    # 0으로 나누기 방지
+    if (result_df["total_qty"] == 0).any():
+        raise ZeroDivisionError("total_qty가 0인 행이 있습니다.")
+
+    def calculate_index(
+        rate: pd.Series, config: Dict[str, Union[int, float]], reverse: bool = False
+    ) -> pd.Series:
         """
         품질 지수를 계산하는 헬퍼 함수
 
         Args:
-            rate (pd.Series): 계산할 비율 데이터
-            config (dict): 지수 계산 설정 (max_rate, min_rate)
-            reverse (bool): 역방향 계산 여부 (높은 값이 좋은 경우 False, 낮은 값이 좋은 경우 True)
+            rate: 계산할 비율 데이터
+            config: 지수 계산 설정 (max_rate, min_rate)
+            reverse: 역방향 계산 여부 (높은 값이 좋은 경우 False, 낮은 값이 좋은 경우 True)
 
         Returns:
-            pd.Series: 계산된 지수 (0-100)
+            계산된 지수 (0-100)
         """
         max_rate = config["max_rate"]
         min_rate = config["min_rate"]
@@ -206,31 +484,62 @@ def calculate_quality_indices(result_df):
     return result_df
 
 
-def format_date_string(date_str):
+def format_date_string(date_str: str) -> str:
     """
     날짜 문자열을 YYYY-MM-DD 형식으로 변환
 
     Args:
-        date_str (str): YYYYMMDD 형식의 날짜 문자열
+        date_str: YYYYMMDD 형식의 날짜 문자열
 
     Returns:
-        str: YYYY-MM-DD 형식의 날짜 문자열
+        YYYY-MM-DD 형식의 날짜 문자열
+
+    Raises:
+        ValueError: 날짜 문자열 형식이 올바르지 않은 경우
+        IndexError: 날짜 문자열 길이가 8자리가 아닌 경우
     """
-    return f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:]}"
+    if not date_str or len(date_str) != 8:
+        raise ValueError("날짜 문자열은 8자리여야 합니다 (YYYYMMDD)")
+
+    try:
+        return f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:]}"
+    except IndexError:
+        raise ValueError("날짜 문자열 형식이 올바르지 않습니다")
 
 
-def get_selected_data_info(result_df, selected_row_index):
+def get_selected_data_info(
+    result_df: pd.DataFrame, selected_row_index: int
+) -> Dict[str, str]:
     """
     선택된 행의 데이터 정보를 추출
 
     Args:
-        result_df (pd.DataFrame): Assessment 결과 데이터프레임
-        selected_row_index (int): 선택된 행 인덱스
+        result_df: Assessment 결과 데이터프레임
+        selected_row_index: 선택된 행 인덱스
 
     Returns:
-        dict: 선택된 데이터 정보
+        선택된 데이터 정보 딕셔너리
+            - mcode: 모델 코드
+            - start_date: 시작 날짜 (YYYYMMDD)
+            - end_date: 종료 날짜 (YYYYMMDD)
+            - formatted_start_date: 포맷된 시작 날짜 (YYYY-MM-DD)
+            - formatted_end_date: 포맷된 종료 날짜 (YYYY-MM-DD)
+
+    Raises:
+        IndexError: 선택된 행 인덱스가 범위를 벗어난 경우
+        KeyError: 필수 컬럼이 없는 경우
     """
+    if selected_row_index >= len(result_df):
+        raise IndexError("선택된 행 인덱스가 데이터프레임 범위를 벗어났습니다")
+
     selected_row = result_df.iloc[selected_row_index]
+
+    # 필수 컬럼 검증
+    required_columns = ["m_code", "min_date", "max_date"]
+    missing_columns = [col for col in required_columns if col not in selected_row.index]
+    if missing_columns:
+        raise KeyError(f"필수 컬럼이 없습니다: {missing_columns}")
+
     return {
         "mcode": selected_row["m_code"],
         "start_date": selected_row["min_date"],
@@ -243,17 +552,35 @@ def get_selected_data_info(result_df, selected_row_index):
 # =============================================================================
 # UI 섹션 함수들
 # =============================================================================
-def render_overview_tab(result_df):
-    """Overview 탭 렌더링"""
+@handle_ui_rendering_errors
+def render_overview_tab(result_df: pd.DataFrame) -> None:
+    """
+    Overview 탭 렌더링
+
+    Args:
+        result_df: Assessment 결과 데이터프레임
+    """
     st.dataframe(result_df, use_container_width=True, hide_index=True)
     st.subheader("대상 규격 수")
     st.write(f"대상 규격 수: {len(result_df)}")
 
 
+@handle_section_rendering_errors
 def render_production_section(
-    selected_mcode, selected_start_date, selected_end_date, result_df
-):
-    """생산량 분석 섹션 렌더링"""
+    selected_mcode: str,
+    selected_start_date: str,
+    selected_end_date: str,
+    result_df: pd.DataFrame,
+) -> None:
+    """
+    생산량 분석 섹션 렌더링
+
+    Args:
+        selected_mcode: 선택된 모델 코드
+        selected_start_date: 선택된 시작 날짜
+        selected_end_date: 선택된 종료 날짜
+        result_df: Assessment 결과 데이터프레임
+    """
     production_df = get_daily_production_df(
         mcode=selected_mcode,
         start_date=selected_start_date,
@@ -273,21 +600,27 @@ def render_production_section(
         )
 
 
-def get_quality_status_indicator(idx_value):
+def get_quality_status_indicator(idx_value: float) -> Tuple[str, str]:
     """
     품질 지표의 상태를 3단계로 시각적으로 표시하는 함수
 
     Args:
-        idx_value (float): 품질 지수 값
-        reverse (bool): 역방향 판정 여부 (높은 값이 나쁜 경우 True)
+        idx_value: 품질 지수 값
 
     Returns:
-        tuple: (status_text, status_level)
+        (상태 텍스트, 상태 레벨) 튜플
+            - 상태 텍스트: "Excellent", "Warning", "Critical"
+            - 상태 레벨: "blue", "orange", "red"
+
+    상태 기준:
+        - >= 80: Excellent (blue)
+        - >= 50: Warning (orange)
+        - < 50: Critical (red)
     """
-    if idx_value >= 80:
+    if idx_value >= UI_CONFIG["status_thresholds"]["excellent"]:
         status_text = "Excellent"
         status_level = "blue"
-    elif idx_value >= 50:
+    elif idx_value >= UI_CONFIG["status_thresholds"]["warning"]:
         status_text = "Warning"
         status_level = "orange"
     else:
@@ -298,27 +631,30 @@ def get_quality_status_indicator(idx_value):
 
 
 def render_quality_section_with_status(
-    section_name,
-    current_value,
-    status_emoji,
-    status_text,
-    status_level,
-    icon,
-    unit="%",
-    reverse=False,
-):
+    section_name: str,
+    current_value: float,
+    status_emoji: str,
+    status_text: str,
+    status_level: str,
+    icon: str,
+    unit: str = "%",
+    reverse: bool = False,
+) -> bool:
     """
     품질 섹션을 상태 표시와 함께 렌더링하는 래퍼 함수
 
     Args:
-        section_name (str): 섹션 이름
-        current_value (float): 현재 값
-        status_emoji (str): 상태 이모지
-        status_text (str): 상태 텍스트
-        status_level (str): 상태 레벨
-        icon (str): 섹션 아이콘
-        unit (str): 단위 (기본값: "%")
-        reverse (bool): 역방향 표시 여부 (NCF 등)
+        section_name: 섹션 이름
+        current_value: 현재 값
+        status_emoji: 상태 이모지
+        status_text: 상태 텍스트
+        status_level: 상태 레벨
+        icon: 섹션 아이콘
+        unit: 단위 (기본값: "%")
+        reverse: 역방향 표시 여부 (NCF 등)
+
+    Returns:
+        섹션 렌더링 성공 여부
     """
     # 상태 표시 텍스트 생성
     if reverse:
@@ -339,10 +675,22 @@ def render_quality_section_with_status(
         return True
 
 
+@handle_section_rendering_errors
 def render_ncf_section(
-    selected_mcode, selected_start_date, selected_end_date, result_df
-):
-    """NCF 분석 섹션 렌더링"""
+    selected_mcode: str,
+    selected_start_date: str,
+    selected_end_date: str,
+    result_df: pd.DataFrame,
+) -> None:
+    """
+    NCF 분석 섹션 렌더링
+
+    Args:
+        selected_mcode: 선택된 모델 코드
+        selected_start_date: 선택된 시작 날짜
+        selected_end_date: 선택된 종료 날짜
+        result_df: Assessment 결과 데이터프레임
+    """
     ncf_df = get_ncf_monthly_df(
         mcode=selected_mcode,
         start_date=selected_start_date,
@@ -378,10 +726,22 @@ def render_ncf_section(
         )
 
 
+@handle_section_rendering_errors
 def render_uf_section(
-    selected_mcode, selected_start_date, selected_end_date, result_df
-):
-    """UF 분석 섹션 렌더링"""
+    selected_mcode: str,
+    selected_start_date: str,
+    selected_end_date: str,
+    result_df: pd.DataFrame,
+) -> None:
+    """
+    UF 분석 섹션 렌더링
+
+    Args:
+        selected_mcode: 선택된 모델 코드
+        selected_start_date: 선택된 시작 날짜
+        selected_end_date: 선택된 종료 날짜
+        result_df: Assessment 결과 데이터프레임
+    """
     uf_pass_rate = result_df[result_df["m_code"] == selected_mcode][
         "uf_pass_rate"
     ].values[0]
@@ -422,10 +782,22 @@ def render_uf_section(
         )
 
 
+@handle_section_rendering_errors
 def render_weight_section(
-    selected_mcode, selected_start_date, selected_end_date, result_df
-):
-    """중량 분석 섹션 렌더링"""
+    selected_mcode: str,
+    selected_start_date: str,
+    selected_end_date: str,
+    result_df: pd.DataFrame,
+) -> None:
+    """
+    중량 분석 섹션 렌더링
+
+    Args:
+        selected_mcode: 선택된 모델 코드
+        selected_start_date: 선택된 시작 날짜
+        selected_end_date: 선택된 종료 날짜
+        result_df: Assessment 결과 데이터프레임
+    """
     wt_pass_rate = result_df[result_df["m_code"] == selected_mcode][
         "gt_wt_pass_rate"
     ].values[0]
@@ -475,10 +847,22 @@ def render_weight_section(
         )
 
 
+@handle_section_rendering_errors
 def render_rr_section(
-    selected_mcode, formatted_start_date, formatted_end_date, result_df
-):
-    """RR 분석 섹션 렌더링"""
+    selected_mcode: str,
+    formatted_start_date: str,
+    formatted_end_date: str,
+    result_df: pd.DataFrame,
+) -> None:
+    """
+    RR 분석 섹션 렌더링
+
+    Args:
+        selected_mcode: 선택된 모델 코드
+        formatted_start_date: 포맷된 시작 날짜
+        formatted_end_date: 포맷된 종료 날짜
+        result_df: Assessment 결과 데이터프레임
+    """
     rr_pass_rate = result_df[result_df["m_code"] == selected_mcode][
         "rr_pass_rate_pdf"
     ].values[0]
@@ -521,10 +905,22 @@ def render_rr_section(
             st.warning("No RR data found")
 
 
+@handle_section_rendering_errors
 def render_ctl_section(
-    selected_mcode, selected_start_date, selected_end_date, result_df
-):
-    """CTL 분석 섹션 렌더링"""
+    selected_mcode: str,
+    selected_start_date: str,
+    selected_end_date: str,
+    result_df: pd.DataFrame,
+) -> None:
+    """
+    CTL 분석 섹션 렌더링
+
+    Args:
+        selected_mcode: 선택된 모델 코드
+        selected_start_date: 선택된 시작 날짜
+        selected_end_date: 선택된 종료 날짜
+        result_df: Assessment 결과 데이터프레임
+    """
     ctl_pass_rate = result_df[result_df["m_code"] == selected_mcode][
         "ctl_pass_rate"
     ].values[0]
@@ -671,8 +1067,14 @@ def render_ctl_section(
             st.warning("No CTL data found")
 
 
-def render_detail_tab(result_df):
-    """Detail 탭 렌더링"""
+@handle_ui_rendering_errors
+def render_detail_tab(result_df: pd.DataFrame) -> None:
+    """
+    Detail 탭 렌더링
+
+    Args:
+        result_df: Assessment 결과 데이터프레임
+    """
     if "result_df" not in st.session_state:
         st.session_state["result_df"] = result_df
 
@@ -1096,8 +1498,11 @@ def render_detail_tab(result_df):
         )
 
 
-def render_description_tab():
-    """Description 탭 렌더링"""
+@handle_ui_rendering_errors
+def render_description_tab() -> None:
+    """
+    Description 탭 렌더링
+    """
     st.title("Detail")
 
     try:
@@ -1111,33 +1516,90 @@ def render_description_tab():
 
 
 # =============================================================================
-# 상수 정의
-# =============================================================================
-# 품질 지수 계산을 위한 상수들
-
-QUALITY_INDICES_CONFIG = {
-    "ncf": {"max_rate": 20909, "min_rate": 1165, "multiplier": 1000000},
-    "uf": {"max_rate": 0.9948, "min_rate": 0.599},
-    "gt_weight": {"max_rate": 1.0, "min_rate": 0.9719},
-    "rr": {"max_rate": 0.999, "min_rate": 0.593},
-    "ctl": {"max_rate": 1.0, "min_rate": 0.857},
-}
-
-# UI 레이아웃 상수
-CTL_COLUMN_RATIO = [1, 3]  # CTL 섹션의 컬럼 비율
-
-
-# =============================================================================
 # 메인 페이지 UI 구성
 # =============================================================================
-# 커스텀 CSS 로드
-load_custom_css()
 
 st.title("OE Mass Production Assessment")
 main_tab = st.tabs(["Overview", "Detail", "Description"])
 
 # Assessment 결과 데이터 로드
 result_df = load_assessment_result()
+
+# ======================================================
+result_df = result_df[result_df["year"] == year_select]
+
+result_df["start_mass_production"] = result_df["start_mass_production"].astype(
+    "datetime64[ns]"
+)
+result_df["end_mass_production"] = result_df["start_mass_production"] + pd.Timedelta(
+    days=179
+)
+result_df["status"] = result_df["end_mass_production"].apply(
+    lambda x: "Completed" if x < datetime.now() else "In Progress"
+)
+result_df["YYYYMM"] = result_df["start_mass_production"].dt.strftime("%Y-%m")
+
+col = st.columns(4, vertical_alignment="center")
+
+groupby_yyyymm = result_df.groupby("YYYYMM").agg({"m_code": "count"}).reset_index()
+trace = go.Bar(
+    x=groupby_yyyymm["YYYYMM"],
+    y=groupby_yyyymm["m_code"],
+    text=groupby_yyyymm["m_code"],
+    textposition="outside",
+)
+layout = go.Layout(
+    height=300,
+    margin=dict(l=0, r=0, t=20, b=20),
+)
+fig = go.Figure(data=[trace], layout=layout)
+col[0].plotly_chart(fig, use_container_width=True)
+
+groupby_status = result_df.groupby("status").agg({"m_code": "count"}).reset_index()
+trace = go.Pie(
+    labels=groupby_status["status"],
+    values=groupby_status["m_code"],
+    direction="clockwise",
+    textinfo="label+value",
+    textposition="inside",
+)
+layout = go.Layout(
+    height=300,
+    margin=dict(l=0, r=0, t=20, b=20),
+)
+fig = go.Figure(data=[trace], layout=layout)
+col[1].plotly_chart(fig, use_container_width=True)
+
+groupby_plant = result_df.groupby("plant").agg({"m_code": "count"}).reset_index()
+trace = go.Pie(
+    labels=groupby_plant["plant"],
+    values=groupby_plant["m_code"],
+    direction="clockwise",
+    textinfo="label+value",
+    textposition="inside",
+)
+layout = go.Layout(
+    height=300,
+    margin=dict(l=0, r=0, t=20, b=20),
+)
+fig = go.Figure(data=[trace], layout=layout)
+col[2].plotly_chart(fig, use_container_width=True)
+
+
+groupby_oem = result_df.groupby("oem").agg({"m_code": "count"}).reset_index()
+trace = go.Pie(
+    labels=groupby_oem["oem"],
+    values=groupby_oem["m_code"],
+    direction="clockwise",
+    textinfo="label+value",
+    textposition="inside",
+)
+layout = go.Layout()
+fig = go.Figure(data=[trace], layout=layout)
+col[3].plotly_chart(fig, use_container_width=True)
+
+# ======================================================
+
 
 with main_tab[0]:
     render_overview_tab(result_df)
@@ -1147,35 +1609,3 @@ with main_tab[1]:
 
 with main_tab[2]:
     render_description_tab()
-
-
-def safe_data_loading(func, *args, **kwargs):
-    """
-    데이터 로딩 함수를 안전하게 실행하는 래퍼 함수
-
-    Args:
-        func: 실행할 데이터 로딩 함수
-        *args, **kwargs: 함수 인자들
-
-    Returns:
-        pd.DataFrame: 로딩된 데이터프레임 또는 빈 데이터프레임
-    """
-    try:
-        return func(*args, **kwargs)
-    except Exception as e:
-        st.error(f"데이터 로딩 중 오류 발생: {str(e)}")
-        return pd.DataFrame()
-
-
-def render_section_with_error_handling(section_func, *args, **kwargs):
-    """
-    섹션 렌더링 함수를 에러 처리와 함께 실행
-
-    Args:
-        section_func: 실행할 섹션 함수
-        *args, **kwargs: 함수 인자들
-    """
-    try:
-        section_func(*args, **kwargs)
-    except Exception as e:
-        st.error(f"섹션 렌더링 중 오류 발생: {str(e)}")
