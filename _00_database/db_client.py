@@ -211,7 +211,7 @@ class SQLiteClient:
             conn.close()
 
 
-@cache_resource_safe(ttl=3600)
+# @cache_resource_safe(ttl=3600)
 def get_client(db_type: str = "snowflake"):
     """
     주어진 DB 종류에 맞는 클라이언트 객체를 반환합니다.

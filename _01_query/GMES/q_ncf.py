@@ -56,8 +56,8 @@ CTE_MES_NONCOFOMITY_MONTHLY = """--sql
     WHERE 
         1=1
         AND DFT_QTY <> 0                             -- 부적합 수량이 0이 아닌 경우만
-        AND STXC IN ('S', 'M', 'T')                  -- 상태 코드: S(Scrap), M(Modify), T(Transfer)
-        AND INS_TP_CD IN ('1', '2', '3')             -- 검사 유형: 1(초검), 2(재검), 3(출하검)
+        AND STXC IN ('S', 'M', 'T')                  
+        AND INS_TP_CD IN ('1', '2', '3', '5', '6', '7', '9')        
     GROUP BY
         PLT_CD,
         SPEC_CD,
@@ -80,9 +80,49 @@ CTE_MES_NONCOFOMITY_DAILY = """--sql
     WHERE 1=1
         AND DFT_QTY <> 0                            -- 부적합 수량이 0이 아닌 경우만
         AND STXC IN ('S', 'M', 'T')                 -- 상태 코드: S(Scrap), M(Modify), T(Transfer)
-        AND INS_TP_CD IN ('1', '2', '3')            -- 검사 유형: 1(초검), 2(재검), 3(출하검)
+        AND INS_TP_CD IN ('1', '2', '3', '5', '6', '7', '9')           
     GROUP BY
         PLT_CD,
+        SPEC_CD,
+        DFT_CD,
+        INS_DATE
+"""
+CTE_MES_SHIPPING_NCF_MONTHLY = """--sql
+    SELECT
+        PLT_CD PLANT,
+        SPEC_CD,
+        DFT_CD,
+        SUBSTRING(INS_DATE, 1, 4) YYYY,
+        SUBSTRING(INS_DATE, 5, 2) MM,
+        SUM(DFT_QTY) as DFT_QTY
+    FROM HKT_DW.MES.QLT_F_LQLTTR120
+    WHERE 1=1
+        AND DFT_QTY <> 0
+        AND DFT_OCCR_FG = 1
+    GROUP BY
+        PLT_CD, 
+        SPEC_CD,
+        DFT_CD,
+        SUBSTRING(INS_DATE, 1, 4),
+        SUBSTRING(INS_DATE, 5, 2)
+    HAVING
+        SUM(DFT_QTY) IS NOT NULL    
+"""
+
+
+CTE_MES_SHIPPING_NCF_DAILY = """--sql
+    SELECT
+        PLT_CD PLANT,
+        SPEC_CD,
+        DFT_CD,
+        INS_DATE,
+        SUM(DFT_QTY) as DFT_QTY
+    FROM HKT_DW.MES.QLT_F_LQLTTR120
+    WHERE 1=1
+        AND DFT_QTY <> 0
+        AND DFT_OCCR_FG = 1
+    GROUP BY
+        PLT_CD, 
         SPEC_CD,
         DFT_CD,
         INS_DATE
@@ -129,35 +169,61 @@ def ncf_monthly(
     >>> print(query)
     """
     # WHERE 절 조건을 동적으로 생성
-    where_conditions = []
+    where_conditions_ncf = []
+    where_conditions_shp = []
 
     if mcode_list:
         mcode_str = ", ".join(f"'{m}'" for m in mcode_list)
-        where_conditions.append(f"MAS.M_CODE IN ({mcode_str})")
+        where_conditions_ncf.append(f"MAS.M_CODE IN ({mcode_str})")
+        where_conditions_shp.append(f"MAS.M_CODE IN ({mcode_str})")
 
     if yyyy:
-        where_conditions.append(f"NCF.YYYY = {yyyy}")
+        where_conditions_ncf.append(f"NCF.YYYY = {yyyy}")
+        where_conditions_shp.append(f"SHP.YYYY = {yyyy}")
 
     if mm:
-        where_conditions.append(f"NCF.MM = {mm}")
+        where_conditions_ncf.append(f"NCF.MM = {mm}")
+        where_conditions_shp.append(f"SHP.MM = {mm}")
 
     if ncf_list:
         ncf_str = ", ".join(f"'{n}'" for n in ncf_list)
-        where_conditions.append(f"NCF.DFT_CD IN ({ncf_str})")
+        where_conditions_ncf.append(f"NCF.DFT_CD IN ({ncf_str})")
+        where_conditions_shp.append(f"SHP.DFT_CD IN ({ncf_str})")
 
-    if start_date:
-        where_conditions.append(f"NCF.INS_DATE >= '{start_date}'")
+    if start_date and end_date:
+        # 월별 데이터는 YYYYMM 형식으로 변환하여 비교
+        start_yyyy = start_date[:4]
+        start_mm = start_date[4:6]
+        end_yyyy = end_date[:4]
+        end_mm = end_date[4:6]
 
-    if end_date:
-        where_conditions.append(f"NCF.INS_DATE <= '{end_date}'")
+        # 기간 범위 조회 (해당 기간 내의 모든 월 데이터)
+        where_conditions_ncf.append(
+            f"(NCF.YYYY > {start_yyyy} OR (NCF.YYYY = {start_yyyy} AND NCF.MM >= {start_mm}))"
+        )
+        where_conditions_shp.append(
+            f"(SHP.YYYY > {start_yyyy} OR (SHP.YYYY = {start_yyyy} AND SHP.MM >= {start_mm}))"
+        )
+        where_conditions_ncf.append(
+            f"(NCF.YYYY < {end_yyyy} OR (NCF.YYYY = {end_yyyy} AND NCF.MM <= {end_mm}))"
+        )
+        where_conditions_shp.append(
+            f"(SHP.YYYY < {end_yyyy} OR (SHP.YYYY = {end_yyyy} AND SHP.MM <= {end_mm}))"
+        )
 
     # WHERE 절 문자열 생성
-    where_clause = " AND ".join(where_conditions) if where_conditions else "1=1"
+    where_clause_ncf = (
+        " AND ".join(where_conditions_ncf) if where_conditions_ncf else "1=1"
+    )
+    where_clause_shp = (
+        " AND ".join(where_conditions_shp) if where_conditions_shp else "1=1"
+    )
 
     query = f"""--sql
         WITH 
             MAS AS ({CTE_MES_MASTER}),
-            NCF AS ({CTE_MES_NONCOFOMITY_MONTHLY})
+            NCF AS ({CTE_MES_NONCOFOMITY_MONTHLY}),
+            SHP AS ({CTE_MES_SHIPPING_NCF_MONTHLY})
         SELECT
             MAS.PLANT,                               -- 공장 코드
             MAS.M_CODE,                              -- 제품 코드
@@ -171,7 +237,22 @@ def ncf_monthly(
         LEFT JOIN NCF
             ON MAS.SPEC_CD = NCF.SPEC_CD 
                 AND MAS.PLANT = NCF.PLANT
-        WHERE {where_clause}
+        WHERE {where_clause_ncf}
+        UNION ALL
+        SELECT
+            MAS.PLANT,
+            MAS.M_CODE,
+            MAS.SPEC_CD,
+            MAS.STXC,
+            SHP.YYYY,
+            SHP.MM,
+            SHP.DFT_CD,
+            SHP.DFT_QTY
+        FROM MAS
+        LEFT JOIN SHP
+            ON MAS.SPEC_CD = SHP.SPEC_CD 
+                AND MAS.PLANT = SHP.PLANT
+        WHERE {where_clause_shp}
     """
     return query
 
@@ -205,28 +286,45 @@ def ncf_daily(
         CTE를 포함한 SQL 쿼리 문자열을 반환합니다.
     """
     # WHERE 절 조건을 동적으로 생성
-    where_conditions = []
+    where_conditions_ncf = []
 
     if mcode:
-        where_conditions.append(f"MAS.M_CODE = '{mcode}'")
+        where_conditions_ncf.append(f"MAS.M_CODE = '{mcode}'")
 
     if ncf_list:
         ncf_str = ", ".join(f"'{n}'" for n in ncf_list)
-        where_conditions.append(f"NCF.DFT_CD IN ({ncf_str})")
+        where_conditions_ncf.append(f"NCF.DFT_CD IN ({ncf_str})")
 
     if start_date:
-        where_conditions.append(f"NCF.INS_DATE >= '{start_date}'")
+        where_conditions_ncf.append(f"NCF.INS_DATE >= '{start_date}'")
 
     if end_date:
-        where_conditions.append(f"NCF.INS_DATE <= '{end_date}'")
+        where_conditions_ncf.append(f"NCF.INS_DATE <= '{end_date}'")
+
+    where_conditions_shp = []
+
+    if mcode:
+        where_conditions_shp.append(f"MAS.M_CODE = '{mcode}'")
+
+    if start_date:
+        where_conditions_shp.append(f"SHP.INS_DATE >= '{start_date}'")
+
+    if end_date:
+        where_conditions_shp.append(f"SHP.INS_DATE <= '{end_date}'")
 
     # WHERE 절 문자열 생성
-    where_clause = " AND ".join(where_conditions) if where_conditions else "1=1"
+    where_clause_ncf = (
+        " AND ".join(where_conditions_ncf) if where_conditions_ncf else "1=1"
+    )
+    where_clause_shp = (
+        " AND ".join(where_conditions_shp) if where_conditions_shp else "1=1"
+    )
 
     query = f"""--sql
         WITH 
             MAS AS ({CTE_MES_MASTER}),
-            NCF AS ({CTE_MES_NONCOFOMITY_DAILY})
+            NCF AS ({CTE_MES_NONCOFOMITY_DAILY}),
+            SHP AS ({CTE_MES_SHIPPING_NCF_DAILY})
         SELECT
             MAS.PLANT,
             MAS.M_CODE,
@@ -239,7 +337,21 @@ def ncf_daily(
         LEFT JOIN NCF
             ON MAS.SPEC_CD = NCF.SPEC_CD 
                 AND MAS.PLANT = NCF.PLANT
-        WHERE {where_clause}
+        WHERE {where_clause_ncf}
+        UNION
+        SELECT
+            MAS.PLANT,
+            MAS.M_CODE,
+            MAS.SPEC_CD,
+            MAS.STXC,
+            SHP.DFT_CD,
+            SHP.DFT_QTY,
+            SHP.INS_DATE
+        FROM MAS
+        LEFT JOIN SHP
+            ON MAS.SPEC_CD = SHP.SPEC_CD 
+                AND MAS.PLANT = SHP.PLANT
+        WHERE {where_clause_shp}
     """
     return query
 
