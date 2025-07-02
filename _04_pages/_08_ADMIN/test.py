@@ -26,10 +26,14 @@ if config.DEV_MODE:
     importlib.reload(q_ncf)
 
 
-df = pd.read_csv("test_db.csv")
-
-db_client = get_client("sqlite")  # 또는 "snowflake"
-db_client.insert_dataframe(df, "mass_assess_target")
-
+db_client = get_client("sqlite")
 df = db_client.execute("SELECT * FROM mass_assess_target")
 st.dataframe(df)
+
+df["M_CODE"] = df["M_CODE"].astype(str)
+df["M_CODE_RR"] = df["M_CODE_RR"].astype(str)
+df["M_CODE_PAIR"] = df["M_CODE_PAIR"].astype(str)
+
+db_client.insert_dataframe(df, "mass_assess_target")
+
+st.text(df.info())
