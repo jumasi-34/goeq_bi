@@ -192,3 +192,21 @@ with tab2:
 
     st.subheader(f"Update 필요한 대상 규격 : {len(need_update_target_df)} 규격")
     st.dataframe(need_update_target_df)
+
+    st.markdown(
+        """
+| 문법 및 숏코드                           | 설명 |
+|----------------------------------------|------|
+| `#, ##, ###, ####`                       | 헤더 (H1, H2, H3) – GitHub Flavored Markdown 기반 |
+| `**굵게**, *기울임*, ***굵게+기울기***` | 굵기/이탤릭 강조 – 일반 Markdown 지원 |
+| `- 목록, 1. 순서 목록`               | 비순서/순서 목록 – 일반 Markdown 지원 |
+| `> 인용문`                             | 인용 – 일반 Markdown 지원 |
+| `---`                                  | 수평선 – 일반 Markdown 지원 |
+| `:material/icon_name:`                 | 구글 머티리얼 심볼 아이콘 삽입 |
+| `:color[text]`                         | 컬러 텍스트 (blue, green, orange, red, violet, gray/grey, rainbow, primary) |
+| `:color-background[text]`              | 배경 컬러 적용 텍스트 |
+| `:color-badge[text]`                   | 컬러 배지 – 배경과 테두리 포함 |
+| `:small[text]`                         | 작은 글씨 표시 |
+    """,
+        unsafe_allow_html=True,
+    )
