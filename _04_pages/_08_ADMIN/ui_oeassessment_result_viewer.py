@@ -333,6 +333,50 @@ def multi_condition_style(val: Union[float, int]) -> str:
         return ""  # 기본 스타일
 
 
+def get_insight_status_style(status: str) -> Tuple[str, str, str]:
+    """
+    Assessment Insight 상태에 따른 스타일 정보를 반환하는 함수
+
+    Args:
+        status: 상태 값 ("Need Update", "Reviewed", "Completed")
+
+    Returns:
+        (배경색, 테두리색, 텍스트색) 튜플
+
+    상태별 색상:
+        - "Need Update": 주황색 (경고)
+        - "Reviewed": 파란색 (검토 중)
+        - "Completed": 초록색 (완료)
+    """
+    status_colors = {
+        "Need Update": {
+            "bg_color": "#fef3c7",  # 연한 주황색 배경
+            "border_color": "#f59e0b",  # 주황색 테두리
+            "text_color": "#92400e",  # 진한 주황색 텍스트
+        },
+        "Reviewed": {
+            "bg_color": "#dbeafe",  # 연한 파란색 배경
+            "border_color": "#3b82f6",  # 파란색 테두리
+            "text_color": "#1e40af",  # 진한 파란색 텍스트
+        },
+        "Completed": {
+            "bg_color": "#dcfce7",  # 연한 초록색 배경
+            "border_color": "#22c55e",  # 초록색 테두리
+            "text_color": "#166534",  # 진한 초록색 텍스트
+        },
+    }
+
+    # 기본값 (알 수 없는 상태)
+    default_style = {
+        "bg_color": "#f3f4f6",  # 회색 배경
+        "border_color": "#9ca3af",  # 회색 테두리
+        "text_color": "#6b7280",  # 회색 텍스트
+    }
+
+    style = status_colors.get(status, default_style)
+    return style["bg_color"], style["border_color"], style["text_color"]
+
+
 # =============================================================================
 # Data Loading
 # =============================================================================
@@ -560,9 +604,82 @@ def render_overview_tab(result_df: pd.DataFrame) -> None:
     Args:
         result_df: Assessment 결과 데이터프레임
     """
+
     st.dataframe(result_df, use_container_width=True, hide_index=True)
     st.subheader("대상 규격 수")
     st.write(f"대상 규격 수: {len(result_df)}")
+    # ======================================================
+    result_df["start_mass_production"] = result_df["start_mass_production"].astype(
+        "datetime64[ns]"
+    )
+    result_df["end_mass_production"] = result_df[
+        "start_mass_production"
+    ] + pd.Timedelta(days=179)
+    result_df["status"] = result_df["end_mass_production"].apply(
+        lambda x: "Completed" if x < datetime.now() else "In Progress"
+    )
+    result_df["YYYYMM"] = result_df["start_mass_production"].dt.strftime("%Y-%m")
+
+    col = st.columns(4, vertical_alignment="center")
+
+    groupby_yyyymm = result_df.groupby("YYYYMM").agg({"m_code": "count"}).reset_index()
+    trace = go.Bar(
+        x=groupby_yyyymm["YYYYMM"],
+        y=groupby_yyyymm["m_code"],
+        text=groupby_yyyymm["m_code"],
+        textposition="outside",
+    )
+    layout = go.Layout(
+        height=300,
+        margin=dict(l=0, r=0, t=20, b=20),
+    )
+    fig = go.Figure(data=[trace], layout=layout)
+    col[0].plotly_chart(fig, use_container_width=True)
+
+    groupby_status = result_df.groupby("status").agg({"m_code": "count"}).reset_index()
+    trace = go.Pie(
+        labels=groupby_status["status"],
+        values=groupby_status["m_code"],
+        direction="clockwise",
+        textinfo="label+value",
+        textposition="inside",
+    )
+    layout = go.Layout(
+        height=300,
+        margin=dict(l=0, r=0, t=20, b=20),
+    )
+    fig = go.Figure(data=[trace], layout=layout)
+    col[1].plotly_chart(fig, use_container_width=True)
+
+    groupby_plant = result_df.groupby("plant").agg({"m_code": "count"}).reset_index()
+    trace = go.Pie(
+        labels=groupby_plant["plant"],
+        values=groupby_plant["m_code"],
+        direction="clockwise",
+        textinfo="label+value",
+        textposition="inside",
+    )
+    layout = go.Layout(
+        height=300,
+        margin=dict(l=0, r=0, t=20, b=20),
+    )
+    fig = go.Figure(data=[trace], layout=layout)
+    col[2].plotly_chart(fig, use_container_width=True)
+
+    groupby_oem = result_df.groupby("oem").agg({"m_code": "count"}).reset_index()
+    trace = go.Pie(
+        labels=groupby_oem["oem"],
+        values=groupby_oem["m_code"],
+        direction="clockwise",
+        textinfo="label+value",
+        textposition="inside",
+    )
+    layout = go.Layout()
+    fig = go.Figure(data=[trace], layout=layout)
+    col[3].plotly_chart(fig, use_container_width=True)
+
+
+# ======================================================
 
 
 @handle_section_rendering_errors
@@ -1120,12 +1237,14 @@ def render_detail_tab(result_df: pd.DataFrame) -> None:
             how="left",
         )
         result_df["Field Return"] = result_df["Field Return"].fillna(value=0)
-
         show_full_table = st.toggle("Show Full Table", value=False)
         if show_full_table:
             remain_columns = [
+                "year",
                 "m_code",
                 "plant",
+                "oem",
+                "vehicle",
                 "min_date",
                 "max_date",
                 "total_qty",
@@ -1147,8 +1266,11 @@ def render_detail_tab(result_df: pd.DataFrame) -> None:
             ]
         else:
             remain_columns = [
+                "year",
                 "m_code",
                 "plant",
+                "oem",
+                "vehicle",
                 "min_date",
                 "max_date",
                 "total_qty",
@@ -1185,8 +1307,11 @@ def render_detail_tab(result_df: pd.DataFrame) -> None:
         )
 
         column_config = {
+            "year": st.column_config.TextColumn("Year", width="small"),
             "m_code": st.column_config.TextColumn("M-Code", width="small"),
             "plant": st.column_config.TextColumn("Plant", width="small"),
+            "oem": st.column_config.TextColumn("OEM", width="small"),
+            "vehicle": st.column_config.TextColumn("Vehicle", width="small"),
             "min_date": st.column_config.TextColumn(
                 "Start",
                 help="Mass Production Start Date",
@@ -1449,6 +1574,68 @@ def render_detail_tab(result_df: pd.DataFrame) -> None:
                 st.info("### :grey[No Field Return]")
         # endregion
 
+        # region Insight
+        insight_df = get_client("sqlite").execute(
+            f"SELECT * FROM mass_assess_insight WHERE M_CODE = '{selected_data['mcode']}'"
+        )
+
+        # Insight 섹션 헤더
+        st.markdown(f"#### :material/lightbulb: **:grey[Assessment Insights]**")
+
+        # 상태에 따른 색상 스타일 가져오기
+
+        if not insight_df.empty:
+            # Status와 Insight 데이터 추출
+            status = str(insight_df.iloc[0]["Status"])
+            insight = str(insight_df.iloc[0]["Insight"])
+            bg_color, border_color, text_color = get_insight_status_style(status)
+
+            # Insight 섹션 레이아웃
+            insight_col = st.columns([0.5, 2, 0.5, 7.5], vertical_alignment="center")
+
+            # Status 표시 (왼쪽 컬럼)
+            with insight_col[1]:
+                st.markdown(
+                    f"""
+                    <div style="
+                        background: {bg_color};
+                        border: 2px solid {border_color};
+                        border-radius: 12px;
+                        padding: 1.5rem;
+                        text-align: center;
+                        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+                    ">
+                        <div style="
+                            font-size: 1.2rem;
+                            font-weight: 600;
+                            color: {text_color};
+                            margin: 0;
+                        ">{status}</div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+            # Insight 표시 (오른쪽 컬럼)
+            with insight_col[3]:
+                st.markdown(
+                    insight,
+                    unsafe_allow_html=True,
+                )
+        else:
+            # 데이터가 없는 경우
+            insight_col = st.columns([0.5, 10], vertical_alignment="center")
+            insight_col[1].markdown(
+                f"""
+                <div class="section-card">
+                    <div style="text-align: center; padding: 1rem;">
+                        <p style="color: #9ca3af; margin: 0;">No Assessment Insights Available</p>
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        # endregion
+
         # 각 분석 섹션 렌더링
         st.markdown(
             f"#### :material/analytics: **:grey[Production Analysis]**",
@@ -1525,80 +1712,7 @@ main_tab = st.tabs(["Overview", "Detail", "Description"])
 # Assessment 결과 데이터 로드
 result_df = load_assessment_result()
 
-# ======================================================
 result_df = result_df[result_df["year"] == year_select]
-
-result_df["start_mass_production"] = result_df["start_mass_production"].astype(
-    "datetime64[ns]"
-)
-result_df["end_mass_production"] = result_df["start_mass_production"] + pd.Timedelta(
-    days=179
-)
-result_df["status"] = result_df["end_mass_production"].apply(
-    lambda x: "Completed" if x < datetime.now() else "In Progress"
-)
-result_df["YYYYMM"] = result_df["start_mass_production"].dt.strftime("%Y-%m")
-
-col = st.columns(4, vertical_alignment="center")
-
-groupby_yyyymm = result_df.groupby("YYYYMM").agg({"m_code": "count"}).reset_index()
-trace = go.Bar(
-    x=groupby_yyyymm["YYYYMM"],
-    y=groupby_yyyymm["m_code"],
-    text=groupby_yyyymm["m_code"],
-    textposition="outside",
-)
-layout = go.Layout(
-    height=300,
-    margin=dict(l=0, r=0, t=20, b=20),
-)
-fig = go.Figure(data=[trace], layout=layout)
-col[0].plotly_chart(fig, use_container_width=True)
-
-groupby_status = result_df.groupby("status").agg({"m_code": "count"}).reset_index()
-trace = go.Pie(
-    labels=groupby_status["status"],
-    values=groupby_status["m_code"],
-    direction="clockwise",
-    textinfo="label+value",
-    textposition="inside",
-)
-layout = go.Layout(
-    height=300,
-    margin=dict(l=0, r=0, t=20, b=20),
-)
-fig = go.Figure(data=[trace], layout=layout)
-col[1].plotly_chart(fig, use_container_width=True)
-
-groupby_plant = result_df.groupby("plant").agg({"m_code": "count"}).reset_index()
-trace = go.Pie(
-    labels=groupby_plant["plant"],
-    values=groupby_plant["m_code"],
-    direction="clockwise",
-    textinfo="label+value",
-    textposition="inside",
-)
-layout = go.Layout(
-    height=300,
-    margin=dict(l=0, r=0, t=20, b=20),
-)
-fig = go.Figure(data=[trace], layout=layout)
-col[2].plotly_chart(fig, use_container_width=True)
-
-
-groupby_oem = result_df.groupby("oem").agg({"m_code": "count"}).reset_index()
-trace = go.Pie(
-    labels=groupby_oem["oem"],
-    values=groupby_oem["m_code"],
-    direction="clockwise",
-    textinfo="label+value",
-    textposition="inside",
-)
-layout = go.Layout()
-fig = go.Figure(data=[trace], layout=layout)
-col[3].plotly_chart(fig, use_container_width=True)
-
-# ======================================================
 
 
 with main_tab[0]:

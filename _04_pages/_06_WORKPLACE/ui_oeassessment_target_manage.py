@@ -23,11 +23,11 @@ with tab1:
 
     # 데이터 로드 (항상 원본)
     if "original_target_df" not in st.session_state:
-        df = get_client("sqlite").execute("SELECT * FROM mass_assess_target")
+        target_df = get_client("sqlite").execute("SELECT * FROM mass_assess_target")
         for col in ["M_CODE", "M_CODE_RR", "M_CODE_PAIR"]:
-            if col in df.columns:
-                df[col] = df[col].astype(str).replace("nan", "")
-        st.session_state.original_target_df = df.copy()
+            if col in target_df.columns:
+                target_df[col] = target_df[col].astype(str).replace("nan", "")
+        st.session_state.original_target_df = target_df.copy()
 
     df_for_edit = st.session_state.original_target_df.copy()
 
@@ -98,11 +98,11 @@ with tab1:
         help="Cancel all current changes and revert to original data from DB",
     ):
         try:
-            df = get_client("sqlite").execute("SELECT * FROM mass_assess_target")
+            target_df = get_client("sqlite").execute("SELECT * FROM mass_assess_target")
             for col in ["M_CODE", "M_CODE_RR", "M_CODE_PAIR"]:
-                if col in df.columns:
-                    df[col] = df[col].astype(str).replace("nan", "")
-            st.session_state.original_target_df = df.copy()
+                if col in target_df.columns:
+                    target_df[col] = target_df[col].astype(str).replace("nan", "")
+            st.session_state.original_target_df = target_df.copy()
             # data_editor의 key를 새로 생성
             st.session_state.target_editor_key = str(uuid.uuid4())
             st.success("Target data has been reset successfully!")
@@ -173,11 +173,22 @@ with tab2:
         help="Cancel all current changes and revert to original data from DB",
     ):
         try:
-            df = get_client("sqlite").execute("SELECT * FROM mass_assess_insight")
-            st.session_state.original_insight_df = df.copy()
+            target_df = get_client("sqlite").execute(
+                "SELECT * FROM mass_assess_insight"
+            )
+            st.session_state.original_insight_df = target_df.copy()
             # data_editor의 key를 새로 생성
             st.session_state.insight_editor_key = str(uuid.uuid4())
             st.success("Result data has been reset successfully!")
             st.rerun()
         except Exception as e:
             st.error(f"Error occurred while resetting result data: {str(e)}")
+    # st.dataframe(st.session_state.original_target_df)
+    # st.dataframe(st.session_state.original_insight_df)
+    updated_mcode_list = st.session_state.original_insight_df["M_CODE"].tolist()
+    need_update_target_df = st.session_state.original_target_df[
+        ~st.session_state.original_target_df["M_CODE"].isin(updated_mcode_list)
+    ]
+
+    st.subheader(f"Update 필요한 대상 규격 : {len(need_update_target_df)} 규격")
+    st.dataframe(need_update_target_df)
