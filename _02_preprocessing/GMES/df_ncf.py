@@ -250,3 +250,17 @@ def get_ncf_by_dft_cd(mcode: str, start_date: str, end_date: str) -> pd.DataFram
     df = df.sort_values(by=["DFT_QTY"], ascending=False).reset_index(drop=True)
     df["CUM_PCT"] = df["DFT_QTY"].cumsum() / df["DFT_QTY"].sum()
     return df
+
+
+@st.cache_data(ttl=600)
+def get_ncf_detail(mcode: str, start_date: str, end_date: str) -> pd.DataFrame:
+    """ """
+    df = get_client("snowflake").execute(
+        q_ncf.ncf_daily(mcode=mcode, start_date=start_date, end_date=end_date)
+    )
+    df.columns = df.columns.str.upper()
+    df["INS_DATE"] = pd.to_datetime(df["INS_DATE"], format="%Y%m%d").dt.strftime(
+        "%Y-%m-%d"
+    )
+    df["YYYYMM"] = pd.to_datetime(df["INS_DATE"]).dt.strftime("%Y-%m")
+    return df

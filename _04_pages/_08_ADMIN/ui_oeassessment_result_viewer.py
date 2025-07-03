@@ -31,7 +31,11 @@ from _00_database.db_client import get_client
 # GMES Data Processing
 from _02_preprocessing.GMES import df_ctl
 from _02_preprocessing.GMES.df_production import get_daily_production_df
-from _02_preprocessing.GMES.df_ncf import get_ncf_monthly_df, get_ncf_by_dft_cd
+from _02_preprocessing.GMES.df_ncf import (
+    get_ncf_monthly_df,
+    get_ncf_by_dft_cd,
+    get_ncf_detail,
+)
 from _02_preprocessing.GMES.df_uf import (
     calculate_uf_pass_rate_monthly,
     uf_standard,
@@ -375,6 +379,11 @@ def get_insight_status_style(status: str) -> Tuple[str, str, str]:
 
     style = status_colors.get(status, default_style)
     return style["bg_color"], style["border_color"], style["text_color"]
+
+
+@st.cache_data
+def convert_for_download(df):
+    return df.to_csv().encode("utf-8")
 
 
 # =============================================================================
@@ -827,8 +836,25 @@ def render_ncf_section(
         icon=":material/problem:",
         expanded=False,
     ):
-        # 상태에 따른 배경색 변경을 위한 컨테이너
+        # Download Button
+        ncf_download_col = st.columns([8, 1])
+        ncf_detail_df = get_ncf_detail(
+            mcode=selected_mcode,
+            start_date=selected_start_date,
+            end_date=selected_end_date,
+        )
+        converted_ncf_detail_df = convert_for_download(ncf_detail_df)
+        ncf_download_col[1].download_button(
+            label="Download CSV",
+            data=converted_ncf_detail_df,
+            file_name=f"{selected_mcode}_ncf_detail.csv",
+            type="tertiary",
+            mime="text/csv",
+            icon=":material/download:",
+            use_container_width=True,
+        )
 
+        # 상태에 따른 배경색 변경을 위한 컨테이너
         ncf_cols = st.columns(2)
 
         ncf_cols[0].plotly_chart(viz.draw_barplot_ncf(ncf_df), use_container_width=True)
@@ -875,6 +901,26 @@ def render_uf_section(
         icon=":material/adjust:",
         expanded=False,
     ):
+        uf_individual_df = uf_individual(
+            mcode=selected_mcode,
+            start_date=selected_start_date,
+            end_date=selected_end_date,
+        )
+
+        # Download Button
+        uf_download_col = st.columns([8, 1])
+
+        converted_uf_detail_df = convert_for_download(uf_individual_df)
+        uf_download_col[1].download_button(
+            label="Download CSV",
+            data=converted_uf_detail_df,
+            file_name=f"{selected_mcode}_uf_detail.csv",
+            type="tertiary",
+            mime="text/csv",
+            icon=":material/download:",
+            use_container_width=True,
+        )
+
         # 상태에 따른 배경색 변경을 위한 컨테이너
         uf_cols = st.columns(2)
 
@@ -888,11 +934,7 @@ def render_uf_section(
         )
 
         uf_standard_df = uf_standard(mcode=selected_mcode)
-        uf_individual_df = uf_individual(
-            mcode=selected_mcode,
-            start_date=selected_start_date,
-            end_date=selected_end_date,
-        )
+
         uf_cols[1].plotly_chart(
             viz.draw_barplot_uf_individual(uf_individual_df, uf_standard_df),
             use_container_width=True,
@@ -931,6 +973,25 @@ def render_weight_section(
         expanded=False,
         icon=":material/weight:",
     ):
+        wt_individual_df = get_weight_individual_df(
+            mcode=selected_mcode,
+            start_date=selected_start_date,
+            end_date=selected_end_date,
+        )
+
+        # Download Button
+        wt_download_col = st.columns([8, 1])
+        converted_wt_detail_df = convert_for_download(wt_individual_df)
+        wt_download_col[1].download_button(
+            label="Download CSV",
+            data=converted_wt_detail_df,
+            file_name=f"{selected_mcode}_wt_detail.csv",
+            type="tertiary",
+            mime="text/csv",
+            icon=":material/download:",
+            use_container_width=True,
+        )
+
         wt_col = st.columns(2)
 
         groupby_weight_ym_df = get_groupby_weight_ym_df(
@@ -940,12 +1001,6 @@ def render_weight_section(
         )
         wt_col[0].plotly_chart(
             viz.draw_weight_distribution(groupby_weight_ym_df), use_container_width=True
-        )
-
-        wt_individual_df = get_weight_individual_df(
-            mcode=selected_mcode,
-            start_date=selected_start_date,
-            end_date=selected_end_date,
         )
 
         wt_individual_df_no_outliers = (
@@ -998,8 +1053,6 @@ def render_rr_section(
     ):
         # 상태에 따른 배경색 변경을 위한 컨테이너
 
-        rr_col = st.columns(2)
-
         rr_df = get_processed_raw_rr_data(
             mcode=selected_mcode,
             start_date=formatted_start_date,
@@ -1009,6 +1062,21 @@ def render_rr_section(
 
         rr_standard_df = get_rr_oe_list_df()
         rr_standard_df = rr_standard_df[rr_standard_df["M_CODE"] == selected_mcode]
+
+        # Download Button
+        rr_download_col = st.columns([8, 1])
+        converted_rr_detail_df = convert_for_download(rr_df)
+        rr_download_col[1].download_button(
+            label="Download CSV",
+            data=converted_rr_detail_df,
+            file_name=f"{selected_mcode}_rr_detail.csv",
+            type="tertiary",
+            mime="text/csv",
+            icon=":material/download:",
+            use_container_width=True,
+        )
+
+        rr_col = st.columns(2)
 
         if len(rr_df) > 0:
             rr_col[0].plotly_chart(
@@ -1056,6 +1124,20 @@ def render_ctl_section(
             start_date=selected_start_date,
             end_date=selected_end_date,
         )
+
+        # Download Button
+        ctl_download_col = st.columns([8, 1])
+        converted_ctl_detail_df = convert_for_download(ctl_raw_data)
+        ctl_download_col[1].download_button(
+            label="Download CSV",
+            data=converted_ctl_detail_df,
+            file_name=f"{selected_mcode}_ctl_detail.csv",
+            type="tertiary",
+            mime="text/csv",
+            icon=":material/download:",
+            use_container_width=True,
+        )
+
         ctl_raw_data["JDG"] = pd.Categorical(
             ctl_raw_data["JDG"], categories=["OK", "NI", "NO"]
         )
