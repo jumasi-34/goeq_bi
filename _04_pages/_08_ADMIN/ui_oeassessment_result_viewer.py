@@ -49,6 +49,8 @@ from _02_preprocessing.GMES.df_weight import (
 
 # Other System Data Processing
 from _02_preprocessing.HGWS.df_hgws import get_hgws_df
+from _02_preprocessing.CQMS.df_quality_issue import get_quality_issue_df_detail
+from _02_preprocessing.CQMS.df_4m_change import get_4m_change_detail_df
 from _02_preprocessing.CQMS.df_cqms_unified import get_cqms_unified_df
 from _02_preprocessing.HOPE.df_oeapp import load_oeapp_df_by_mcode
 
@@ -64,7 +66,6 @@ if config.DEV_MODE:
 # =============================================================================
 # 로깅 설정
 # =============================================================================
-# 로깅 설정
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -400,26 +401,10 @@ def load_assessment_result() -> pd.DataFrame:
     Raises:
         Exception: 데이터베이스 연결 또는 쿼리 실행 중 오류 발생 시
     """
-    return get_client("sqlite").execute("SELECT * FROM mass_assess_result")
+    result_df = get_client("sqlite").execute("SELECT * FROM mass_assess_result")
+    result_df = result_df[result_df["year"] == year_select]
 
-
-@handle_data_loading_errors
-def load_sellin_data(mcode: str) -> pd.DataFrame:
-    """
-    판매 데이터를 SQLite 데이터베이스에서 로드
-
-    Args:
-        mcode: 모델 코드
-
-    Returns:
-        판매 데이터 데이터프레임
-
-    Raises:
-        Exception: 데이터베이스 연결 또는 쿼리 실행 중 오류 발생 시
-    """
-    return get_client("sqlite").execute(
-        f"SELECT * FROM sellin_monthly_agg WHERE M_CODE = '{mcode}'"
-    )
+    return result_df
 
 
 # =============================================================================
@@ -460,6 +445,19 @@ def calculate_quality_indices(result_df: pd.DataFrame) -> pd.DataFrame:
         ValueError: 필수 컬럼이 없는 경우
         ZeroDivisionError: total_qty가 0인 경우
     """
+
+    # 데이터 정렬
+    result_df["start_mass_production"] = result_df["start_mass_production"].astype(
+        "datetime64[ns]"
+    )
+    result_df["end_mass_production"] = result_df[
+        "start_mass_production"
+    ] + pd.Timedelta(days=179)
+    result_df["status"] = result_df["end_mass_production"].apply(
+        lambda x: "Completed" if x < datetime.now() else "In Progress"
+    )
+    result_df["YYYYMM"] = result_df["start_mass_production"].dt.strftime("%Y-%m")
+
     # 필수 컬럼 검증
     required_columns = [
         "ncf_qty",
@@ -534,6 +532,58 @@ def calculate_quality_indices(result_df: pd.DataFrame) -> pd.DataFrame:
         result_df["ctl_pass_rate"], QUALITY_INDICES_CONFIG["ctl"]
     )
 
+    # 지수 평균
+    # None 값이 아닌 지수들만 평균 계산
+    valid_indices = result_df[
+        ["ncf_idx", "uf_idx", "gt_idx", "rr_idx", "ctl_idx"]
+    ].notna()
+    result_df["total_idx"] = (
+        result_df["ncf_idx"].where(valid_indices["ncf_idx"], 0)
+        + result_df["uf_idx"].where(valid_indices["uf_idx"], 0)
+        + result_df["gt_idx"].where(valid_indices["gt_idx"], 0)
+        + result_df["rr_idx"].where(valid_indices["rr_idx"], 0)
+        + result_df["ctl_idx"].where(valid_indices["ctl_idx"], 0)
+    ) / valid_indices.sum(axis=1)
+
+    result_df["uf_pass_rate"] = result_df["uf_pass_rate"] * 100
+    result_df["gt_wt_pass_rate"] = result_df["gt_wt_pass_rate"] * 100
+    result_df["rr_pass_rate_pdf"] = result_df["rr_pass_rate_pdf"] * 100
+    result_df["ctl_pass_rate"] = result_df["ctl_pass_rate"] * 100
+
+    return result_df
+
+
+def calculate_cqms_n_filed_return(result_df: pd.DataFrame):
+    mcode_list = result_df["m_code"].tolist()
+
+    unified_cqms_df = get_cqms_unified_df(mcode_list)
+    unified_cqms_df = unified_cqms_df.pivot_table(
+        index="M_CODE",
+        columns="CATEGORY",
+        aggfunc="size",
+    )
+    unified_cqms_df = unified_cqms_df.reset_index()
+    unified_cqms_df = unified_cqms_df.rename(columns={"M_CODE": "m_code"})
+    result_df = pd.merge(
+        result_df,
+        unified_cqms_df,
+        on="m_code",
+        how="left",
+    )
+    result_df["Quality Issue"] = result_df["Quality Issue"].fillna(value=0)
+    result_df["4M Change"] = result_df["4M Change"].fillna(value=0)
+    result_df["Audit"] = result_df["Audit"].fillna(value=0)
+
+    hgws_df = get_hgws_df(mcode_list)
+    hgws_df = hgws_df.groupby("MCODE").agg({"RETURN CNT": "sum"}).reset_index()
+    hgws_df = hgws_df.rename(columns={"MCODE": "m_code", "RETURN CNT": "Field Return"})
+    result_df = pd.merge(
+        result_df,
+        hgws_df,
+        on="m_code",
+        how="left",
+    )
+    result_df["Field Return"] = result_df["Field Return"].fillna(value=0)
     return result_df
 
 
@@ -560,6 +610,7 @@ def format_date_string(date_str: str) -> str:
         raise ValueError("날짜 문자열 형식이 올바르지 않습니다")
 
 
+# session state에 기록된 data
 def get_selected_data_info(
     result_df: pd.DataFrame, selected_row_index: int
 ) -> Dict[str, str]:
@@ -602,10 +653,40 @@ def get_selected_data_info(
     }
 
 
+# Expender 상태 평가 정의 함수
+def get_quality_status_indicator(idx_value: float) -> Tuple[str, str]:
+    """
+    품질 지표의 상태를 3단계로 시각적으로 표시하는 함수
+
+    Args:
+        idx_value: 품질 지수 값
+
+    Returns:
+        (상태 텍스트, 상태 레벨) 튜플
+            - 상태 텍스트: "Excellent", "Warning", "Critical"
+            - 상태 레벨: "blue", "orange", "red"
+
+    상태 기준:
+        - >= 80: Excellent (blue)
+        - >= 50: Warning (orange)
+        - < 50: Critical (red)
+    """
+    if idx_value >= UI_CONFIG["status_thresholds"]["excellent"]:
+        status_text = "Excellent"
+        status_level = "blue"
+    elif idx_value >= UI_CONFIG["status_thresholds"]["warning"]:
+        status_text = "Warning"
+        status_level = "orange"
+    else:
+        status_text = "Critical"
+        status_level = "red"
+
+    return status_text, status_level
+
+
 # =============================================================================
-# UI 섹션 함수들
+# Streamlit Tab 호출 함수
 # =============================================================================
-@handle_ui_rendering_errors
 def render_overview_tab(result_df: pd.DataFrame) -> None:
     """
     Overview 탭 렌더링
@@ -614,21 +695,190 @@ def render_overview_tab(result_df: pd.DataFrame) -> None:
         result_df: Assessment 결과 데이터프레임
     """
 
-    st.dataframe(result_df, use_container_width=True, hide_index=True)
-    st.subheader("대상 규격 수")
-    st.write(f"대상 규격 수: {len(result_df)}")
-    # ======================================================
-    result_df["start_mass_production"] = result_df["start_mass_production"].astype(
-        "datetime64[ns]"
-    )
-    result_df["end_mass_production"] = result_df[
-        "start_mass_production"
-    ] + pd.Timedelta(days=179)
-    result_df["status"] = result_df["end_mass_production"].apply(
-        lambda x: "Completed" if x < datetime.now() else "In Progress"
-    )
-    result_df["YYYYMM"] = result_df["start_mass_production"].dt.strftime("%Y-%m")
+    render_matric_info(result_df)
+    render_status_indicator(result_df)
 
+
+def render_detail_tab(result_df: pd.DataFrame) -> None:
+    """
+    Detail 탭 렌더링
+
+    Args:
+        result_df: Assessment 결과 데이터프레임
+    """
+    if "result_df" not in st.session_state:
+        st.session_state["result_df"] = result_df
+
+    with st.expander(
+        "Assessment Detail Table", expanded=True, icon=":material/table_chart:"
+    ):
+        assessment_result_df = render_main_table_for_detail_tab(result_df)
+
+    # assessment_result_df가 None인 경우 처리
+    if assessment_result_df is None:
+        st.error("테이블을 불러올 수 없습니다. 데이터를 확인해주세요.")
+        return
+
+    # 선택된 행 처리
+    if (
+        hasattr(assessment_result_df, "selection")
+        and assessment_result_df.selection.rows
+    ):
+        selected_data = get_selected_data_info(
+            result_df, assessment_result_df.selection.rows[0]
+        )
+
+        render_search_criteria_section(selected_data)
+        render_project_info_section(selected_data)
+        render_assessment_insight(selected_data)
+
+        # 각 분석 섹션 렌더링
+        st.markdown(
+            f"#### :material/analytics: **:grey[Production Analysis]**",
+        )
+        production_col = st.columns([0.5, 10], vertical_alignment="center")
+        with production_col[1]:
+            render_production_section(
+                selected_data["mcode"],
+                selected_data["start_date"],
+                selected_data["end_date"],
+                result_df,
+            )
+            render_ncf_section(
+                selected_data["mcode"],
+                selected_data["start_date"],
+                selected_data["end_date"],
+                result_df,
+            )
+            render_uf_section(
+                selected_data["mcode"],
+                selected_data["start_date"],
+                selected_data["end_date"],
+                result_df,
+            )
+            render_weight_section(
+                selected_data["mcode"],
+                selected_data["start_date"],
+                selected_data["end_date"],
+                result_df,
+            )
+            render_rr_section(
+                selected_data["mcode"],
+                selected_data["formatted_start_date"],
+                selected_data["formatted_end_date"],
+                result_df,
+            )
+            render_ctl_section(
+                selected_data["mcode"],
+                selected_data["start_date"],
+                selected_data["end_date"],
+                result_df,
+            )
+
+    else:
+        st.warning(
+            "Please select a row from the assessment result table to view detailed analysis."
+        )
+
+
+@handle_ui_rendering_errors
+def render_description_tab() -> None:
+    """
+    Description 탭 렌더링
+    """
+    st.title("Detail")
+
+    try:
+        with open("_07_docs/product_assessment.md", "r", encoding="utf-8") as file:
+            markdown_content = file.read()
+        st.markdown(markdown_content)
+    except FileNotFoundError:
+        st.error("product_assessment.md 파일을 찾을 수 없습니다.")
+    except Exception as e:
+        st.error(f"파일을 읽는 중 오류가 발생했습니다: {str(e)}")
+
+
+# =============================================================================
+# UI 섹션 함수들 - Overview Tab
+# =============================================================================
+
+
+def render_matric_info(result_df: pd.DataFrame) -> None:
+    n_target = len(result_df)
+    st.subheader(f"대상 규격 수 : :grey[{n_target}개]")
+    total_idx_avg = result_df["total_idx"].mean()
+    st.subheader(f"Total Index 평균 : :grey[{total_idx_avg:.2f}]")
+
+    mcode_list = result_df["m_code"].tolist()
+
+    # 4M 변경
+    df_4m_change = get_4m_change_detail_df(mcode_list)
+
+    merge_4m_change = pd.merge(
+        left=result_df[["m_code", "start_mass_production"]],
+        right=df_4m_change,
+        left_on="m_code",
+        right_on="M_CODE",
+        how="left",
+    )
+    merge_4m_change["end_mass_production"] = merge_4m_change[
+        "start_mass_production"
+    ] + pd.Timedelta(days=365)
+    merge_4m_change = merge_4m_change.dropna(subset=["DOC_NO"])
+    merge_4m_change["Include"] = merge_4m_change.apply(
+        lambda row: (
+            "Include"
+            if pd.notna(row["COMP_DATE"])
+            and pd.notna(row["end_mass_production"])
+            and row["COMP_DATE"] < row["end_mass_production"]
+            else "Exclude"
+        ),
+        axis=1,
+    )
+    merge_4m_change = merge_4m_change[merge_4m_change["Include"] == "Include"]
+    merge_4m_change = merge_4m_change[
+        ~(merge_4m_change["STATUS"] == "Reject(Final Approval)")
+    ]
+    count_4m_change = len(merge_4m_change)
+    st.subheader(f"4M 변경건수 : :grey[{count_4m_change}]")
+
+    st.dataframe(merge_4m_change)
+
+    # 품질이슈
+    df_quality_issue = get_quality_issue_df_detail(mcode_list)
+    merge_quality_issue = pd.merge(
+        left=result_df[["m_code", "start_mass_production"]],
+        right=df_quality_issue,
+        left_on="m_code",
+        right_on="M_CODE",
+        how="left",
+    )
+    merge_quality_issue["end_mass_production"] = merge_quality_issue[
+        "start_mass_production"
+    ] + pd.Timedelta(days=365)
+    merge_quality_issue["Include"] = merge_quality_issue.apply(
+        lambda row: (
+            "Include"
+            if pd.notna(row["COMP_DATE"])
+            and pd.notna(row["end_mass_production"])
+            and row["COMP_DATE"] < row["end_mass_production"]
+            else "Exclude"
+        ),
+        axis=1,
+    )
+    merge_quality_issue = merge_quality_issue[
+        merge_quality_issue["Include"] == "Include"
+    ]
+    merge_quality_issue = merge_quality_issue[
+        ~(merge_quality_issue["STATUS"] == "Reject(Final Approval)")
+    ]
+    count_quality_issue = len(merge_quality_issue)
+    st.subheader(f"품질이슈건수 : :grey[{count_quality_issue}]")
+
+    st.dataframe(merge_quality_issue)
+
+
+def render_status_indicator(result_df: pd.DataFrame) -> None:
     col = st.columns(4, vertical_alignment="center")
 
     groupby_yyyymm = result_df.groupby("YYYYMM").agg({"m_code": "count"}).reset_index()
@@ -688,7 +938,446 @@ def render_overview_tab(result_df: pd.DataFrame) -> None:
     col[3].plotly_chart(fig, use_container_width=True)
 
 
-# ======================================================
+# =============================================================================
+# UI 섹션 함수들 - Detail Tab
+# =============================================================================
+
+
+def render_main_table_for_detail_tab(result_df: pd.DataFrame):
+    """
+    Detail 탭의 메인 테이블을 렌더링하는 함수
+
+    Args:
+        result_df: Assessment 결과 데이터프레임
+
+    Returns:
+        Streamlit dataframe 객체 또는 None (오류 발생 시)
+    """
+    try:
+        show_full_table = st.toggle("Show Full Table", value=False)
+        if show_full_table:
+            remain_columns = [
+                "year",
+                "m_code",
+                "plant",
+                "oem",
+                "vehicle",
+                "min_date",
+                "max_date",
+                "total_qty",
+                "ncf_qty",
+                "ncf_rate",
+                "ncf_idx",
+                "uf_pass_rate",
+                "uf_idx",
+                "gt_wt_pass_rate",
+                "gt_idx",
+                "rr_pass_rate_pdf",
+                "rr_idx",
+                "ctl_pass_rate",
+                "ctl_idx",
+                "total_idx",
+                "Quality Issue",
+                "4M Change",
+                "Audit",
+                "Field Return",
+            ]
+        else:
+            remain_columns = [
+                "year",
+                "m_code",
+                "plant",
+                "oem",
+                "vehicle",
+                "min_date",
+                "max_date",
+                "total_qty",
+                "ncf_idx",
+                "uf_idx",
+                "gt_idx",
+                "rr_idx",
+                "ctl_idx",
+                "total_idx",
+                "Quality Issue",
+                "4M Change",
+                "Audit",
+                "Field Return",
+            ]
+
+        # 존재하는 컬럼만 필터링
+        remain_columns = [col for col in remain_columns if col in result_df.columns]
+
+        # pandas 스타일링 적용
+        styled_df = (
+            result_df[remain_columns]
+            .style.set_properties(
+                subset=[
+                    "ncf_idx",
+                    "uf_idx",
+                    "gt_idx",
+                    "rr_idx",
+                    "ctl_idx",
+                    "total_idx",
+                ],
+                **{
+                    "background-color": f"{config_plotly.LIGHT_GRAY_CLR}",
+                    "text-align": "center",
+                    "font-size": "12px",
+                    "border": "1px solid #ddd",
+                },
+            )
+            .applymap(
+                multi_condition_style,
+                subset=[
+                    "ncf_idx",
+                    "uf_idx",
+                    "gt_idx",
+                    "rr_idx",
+                    "ctl_idx",
+                    "total_idx",
+                ],
+            )
+        )
+
+        column_config = {
+            "year": st.column_config.TextColumn("Year", width="small"),
+            "m_code": st.column_config.TextColumn("M-Code", width="small"),
+            "plant": st.column_config.TextColumn("Plant", width="small"),
+            "oem": st.column_config.TextColumn("OEM", width="small"),
+            "vehicle": st.column_config.TextColumn("Vehicle", width="small"),
+            "min_date": st.column_config.TextColumn(
+                "Start",
+                help="Mass Production Start Date",
+                width="small",
+            ),
+            "max_date": st.column_config.TextColumn(
+                "End",
+                help="Mass Production End Date",
+                width="small",
+            ),
+            "total_qty": st.column_config.NumberColumn(
+                "Total Qty", width="small", format="%.0f"
+            ),
+            "ncf_qty": st.column_config.NumberColumn(
+                "NCF Qty", width="small", format="%.0f"
+            ),
+            "ncf_rate": st.column_config.NumberColumn("NCF(ppm)", format="%.0f ppm"),
+            "ncf_idx": st.column_config.NumberColumn(
+                "NCF Index", width="small", format="%.0f"
+            ),
+            "uf_pass_rate": st.column_config.NumberColumn("UF(%)", format="%.1f%%"),
+            "uf_idx": st.column_config.NumberColumn(
+                "UF Index", width="small", format="%.0f"
+            ),
+            "gt_wt_pass_rate": st.column_config.NumberColumn(
+                "GT(%)", width="small", format="%.1f%%"
+            ),
+            "gt_idx": st.column_config.NumberColumn(
+                "GT Index", width="small", format="%.0f"
+            ),
+            "rr_pass_rate_pdf": st.column_config.NumberColumn(
+                "RR(%)", width="small", format="%.1f%%"
+            ),
+            "rr_idx": st.column_config.NumberColumn(
+                "RR Index", width="small", format="%.0f"
+            ),
+            "ctl_pass_rate": st.column_config.NumberColumn(
+                "CTL(%)", width="small", format="%.1f%%"
+            ),
+            "ctl_idx": st.column_config.NumberColumn(
+                "CTL Index", width="small", format="%.0f"
+            ),
+            "total_idx": st.column_config.NumberColumn(
+                "Total Index", width="small", format="%.0f"
+            ),
+            "Quality Issue": st.column_config.NumberColumn(
+                "Quality Issue", width="small", format="%.0f"
+            ),
+            "4M Change": st.column_config.NumberColumn(
+                "4M Change", width="small", format="%.0f"
+            ),
+            "Audit": st.column_config.NumberColumn(
+                "Audit", width="small", format="%.0f"
+            ),
+            "Field Return": st.column_config.NumberColumn(
+                "Field Return", width="small", format="%.0f"
+            ),
+        }
+
+        # 데이터프레임 표시
+        assessment_result_df = st.dataframe(
+            styled_df,
+            use_container_width=True,
+            hide_index=True,
+            column_config=column_config,
+            key="event_df",
+            on_select="rerun",
+            selection_mode="single-row",
+        )
+        return assessment_result_df
+
+    except Exception as e:
+        logger.error(f"메인 테이블 렌더링 중 오류 발생: {str(e)}")
+        st.error(f"테이블 렌더링 중 오류가 발생했습니다: {str(e)}")
+        return None
+
+
+@handle_section_rendering_errors
+def render_search_criteria_section(selected_data):
+    markdown = f"""
+            <div class="card-container">
+                <h3><span class="material-symbols-rounded">feature_search</span> Search Criteria Information</h3>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+                    <div style="background: rgba(255,255,255,0.1); padding: 1rem; border-radius: 8px;">
+                        <strong>M-Code:</strong><br>
+                        <span style="font-size: 1.2rem; font-weight: bold;">{selected_data['mcode']}</span>
+                    </div>
+                    <div style="background: rgba(255,255,255,0.1); padding: 1rem; border-radius: 8px;">
+                        <strong>Start Date:</strong><br>
+                        <span style="font-size: 1.2rem;">{selected_data['formatted_start_date']}</span>
+                    </div>
+                    <div style="background: rgba(255,255,255,0.1); padding: 1rem; border-radius: 8px;">
+                        <strong>End Date:</strong><br>
+                        <span style="font-size: 1.2rem;">{selected_data['formatted_end_date']}</span>
+                    </div>
+                </div>
+            </div>
+            """
+    st.markdown(
+        markdown,
+        unsafe_allow_html=True,
+    )
+
+
+@handle_section_rendering_errors
+def render_project_info_section(selected_data):
+    oeapp_df = load_oeapp_df_by_mcode(m_code=selected_data["mcode"])
+
+    # SOP, EOP 날짜 형식 변환 (YYYYMM -> YYYY-MM 형태의 문자열로 변환)
+    if not oeapp_df.empty:
+        for date_col in ["SOP", "EOP"]:
+            if date_col in oeapp_df.columns:
+                oeapp_df[date_col] = oeapp_df[date_col].apply(
+                    lambda x: (
+                        f"{str(x)[:4]}-{str(x)[4:6]}"
+                        if pd.notna(x) and str(x) != "nan" and len(str(x)) == 6
+                        else x
+                    )
+                )
+
+    st.markdown(f"#### :material/info: **:grey[Project Information]**")
+    if not oeapp_df.empty:
+        project_info_col = st.columns([0.5, 10], vertical_alignment="center")
+        # 규격 정보
+        project_info_col[1].markdown(
+            f"""
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+            <div style="background: rgba(255,255,255,0.1); padding: 1rem; border-radius: 8px;">
+                <strong>Plant:</strong><br>
+                <span style="font-size: 1.2rem;">{oeapp_df.iloc[0]['PLANT']}</span>
+            </div>
+            <div style="background: rgba(255,255,255,0.1); padding: 1rem; border-radius: 8px;">
+                <strong>Size:</strong><br>
+                <span style="font-size: 1.2rem;">{oeapp_df.iloc[0]['SIZE']}</span>
+            </div>
+            <div style="background: rgba(255,255,255,0.1); padding: 1rem; border-radius: 8px;">
+                <strong>Pattern:</strong><br>
+                <span style="font-size: 1.2rem;">{oeapp_df.iloc[0]['PATTERN']}</span>
+            </div>
+            <div style="background: rgba(255,255,255,0.1); padding: 1rem; border-radius: 8px;">
+                <strong>Product Name:</strong><br>
+                <span style="font-size: 1.2rem;">{oeapp_df.iloc[0]['PROD NAME']}</span>
+            </div>
+            <div style="background: rgba(255,255,255,0.1); padding: 1rem; border-radius: 8px;">
+                <strong>EV / ICE :</strong><br>
+                <span style="font-size: 1.2rem;">{oeapp_df.iloc[0]['EV']}</span>
+            </div>
+        </div>
+        """,
+            unsafe_allow_html=True,
+        )
+
+        # 프로젝트 정보
+        oe_app_info_col = st.columns([0.5, 1, 9], vertical_alignment="center")
+        oe_app_info_col[1].markdown(f"###### **:grey[OE App]**")
+
+        remain_col = [
+            "STATUS",
+            "CAR MAKER",
+            "SALES BRAND",
+            "VEHICLE MODEL(GLOBAL)",
+            # "VEHICLE MODEL(LOCAL)",
+            "PROJECT",
+            "SOP",
+            "EOP",
+        ]
+        column_config = {
+            "STATUS": st.column_config.TextColumn("Status", width="small"),
+            "CAR MAKER": st.column_config.TextColumn("Car Maker", width="small"),
+            "SALES BRAND": st.column_config.TextColumn("Sales Brand", width="small"),
+            "VEHICLE MODEL(GLOBAL)": st.column_config.TextColumn(
+                "Vehicle Model", width="medium"
+            ),
+            "PROJECT": st.column_config.TextColumn("Project", width="small"),
+            "SOP": st.column_config.TextColumn("SOP", width="small"),
+            "EOP": st.column_config.TextColumn("EOP", width="small"),
+        }
+        oe_app_info_col[2].dataframe(
+            oeapp_df[remain_col],
+            use_container_width=True,
+            hide_index=True,
+            column_config=column_config,
+        )
+    else:
+        st.info("No OE Application data available for the selected model code.")
+
+    metric_title_col = st.columns([0.5, 6, 4], vertical_alignment="center")
+    metric_title_col[1].markdown(f"###### **:grey[OEM Event]**")
+    metric_title_col[2].markdown(f"###### **:grey[Field Return]**")
+
+    metric_col = st.columns([0.5, 6, 4], vertical_alignment="center")
+    cqms_unified_df = get_cqms_unified_df(m_code=selected_data["mcode"])
+    groupby_cqms_unified_df = (
+        cqms_unified_df.groupby("CATEGORY")
+        .agg(Count=("CATEGORY", "count"))
+        .reset_index()
+    )
+
+    with metric_col[1]:
+        cqms_col = st.columns(3)
+
+        cqms_col[0].metric(
+            label="Quality Issue",
+            value=(
+                groupby_cqms_unified_df[
+                    groupby_cqms_unified_df["CATEGORY"] == "Quality Issue"
+                ]["Count"].values[0]
+            ),
+            delta=None,
+        )
+        cqms_col[1].metric(
+            label="4M Change",
+            value=(
+                groupby_cqms_unified_df[
+                    groupby_cqms_unified_df["CATEGORY"] == "4M Change"
+                ]["Count"].values[0]
+            ),
+            delta=None,
+        )
+        cqms_col[2].metric(
+            label="Audit",
+            value=(
+                groupby_cqms_unified_df[groupby_cqms_unified_df["CATEGORY"] == "Audit"][
+                    "Count"
+                ].values[0]
+            ),
+            delta=None,
+        )
+    with metric_col[2]:
+        hgws_df = get_hgws_df(m_code=selected_data["mcode"])
+        hgws_df = hgws_df.sort_values(by="RETURN CNT", ascending=False)
+        if not hgws_df.empty:
+            trace = go.Bar(
+                x=hgws_df["RETURN CNT"],
+                y=hgws_df["REASON DESCRIPTION"],
+                text=hgws_df["RETURN CNT"],
+                textposition="outside",
+                marker=dict(color=config_plotly.ORANGE_CLR),
+                orientation="h",
+            )
+            layout = go.Layout(
+                xaxis=dict(
+                    title="Field Return Count",
+                    range=[0, max(hgws_df["RETURN CNT"]) + 1],
+                    visible=False,
+                ),
+                yaxis=dict(title="Reason Description", autorange="reversed"),
+                height=150,
+                margin=dict(l=0, r=0, t=20, b=20),
+            )
+            fig = go.Figure(data=[trace], layout=layout)
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("### :grey[No Field Return]")
+    oem_event_col_detail = st.columns([0.5, 10], vertical_alignment="center")
+    with oem_event_col_detail[1].expander("Detail", expanded=False):
+        if len(cqms_unified_df) > 0:
+            st.dataframe(cqms_unified_df, use_container_width=True, hide_index=True)
+        else:
+            st.info("### :grey[No OEM Event]")
+        if len(hgws_df) > 0:
+            st.dataframe(hgws_df, use_container_width=True, hide_index=True)
+        else:
+            st.info("### :grey[No Field Return]")
+
+
+@handle_section_rendering_errors
+def render_assessment_insight(selected_data: Dict[str, Any]) -> None:
+    """
+    Assessment Insight 섹션 렌더링
+
+    Args:
+        selected_data: 선택된 데이터 정보를 담은 딕셔너리
+    """
+    insight_df = get_client("sqlite").execute(
+        f"SELECT * FROM mass_assess_insight WHERE M_CODE = '{selected_data['mcode']}'"
+    )
+
+    # Insight 섹션 헤더
+    st.markdown(f"#### :material/lightbulb: **:grey[Assessment Insights]**")
+
+    # 상태에 따른 색상 스타일 가져오기
+
+    if not insight_df.empty:
+        # Status와 Insight 데이터 추출
+        status = str(insight_df.iloc[0]["Status"])
+        insight = str(insight_df.iloc[0]["Insight"])
+        bg_color, border_color, text_color = get_insight_status_style(status)
+
+        # Insight 섹션 레이아웃
+        insight_col = st.columns([0.5, 2, 0.5, 7.5], vertical_alignment="center")
+
+        # Status 표시 (왼쪽 컬럼)
+        with insight_col[1]:
+            st.markdown(
+                f"""
+                <div style="
+                    background: {bg_color};
+                    border: 2px solid {border_color};
+                    border-radius: 12px;
+                    padding: 1.5rem;
+                    text-align: center;
+                    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+                ">
+                    <div style="
+                        font-size: 1.2rem;
+                        font-weight: 600;
+                        color: {text_color};
+                        margin: 0;
+                    ">{status}</div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+        # Insight 표시 (오른쪽 컬럼)
+        with insight_col[3]:
+            st.markdown(
+                insight,
+                unsafe_allow_html=True,
+            )
+    else:
+        # 데이터가 없는 경우
+        insight_col = st.columns([0.5, 10], vertical_alignment="center")
+        insight_col[1].markdown(
+            f"""
+            <div class="section-card">
+                <div style="text-align: center; padding: 1rem;">
+                    <p style="color: #9ca3af; margin: 0;">No Assessment Insights Available</p>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
 
 @handle_section_rendering_errors
@@ -724,81 +1413,6 @@ def render_production_section(
         st.plotly_chart(
             viz.draw_barplot_production(production_df), use_container_width=True
         )
-
-
-def get_quality_status_indicator(idx_value: float) -> Tuple[str, str]:
-    """
-    품질 지표의 상태를 3단계로 시각적으로 표시하는 함수
-
-    Args:
-        idx_value: 품질 지수 값
-
-    Returns:
-        (상태 텍스트, 상태 레벨) 튜플
-            - 상태 텍스트: "Excellent", "Warning", "Critical"
-            - 상태 레벨: "blue", "orange", "red"
-
-    상태 기준:
-        - >= 80: Excellent (blue)
-        - >= 50: Warning (orange)
-        - < 50: Critical (red)
-    """
-    if idx_value >= UI_CONFIG["status_thresholds"]["excellent"]:
-        status_text = "Excellent"
-        status_level = "blue"
-    elif idx_value >= UI_CONFIG["status_thresholds"]["warning"]:
-        status_text = "Warning"
-        status_level = "orange"
-    else:
-        status_text = "Critical"
-        status_level = "red"
-
-    return status_text, status_level
-
-
-def render_quality_section_with_status(
-    section_name: str,
-    current_value: float,
-    status_emoji: str,
-    status_text: str,
-    status_level: str,
-    icon: str,
-    unit: str = "%",
-    reverse: bool = False,
-) -> bool:
-    """
-    품질 섹션을 상태 표시와 함께 렌더링하는 래퍼 함수
-
-    Args:
-        section_name: 섹션 이름
-        current_value: 현재 값
-        status_emoji: 상태 이모지
-        status_text: 상태 텍스트
-        status_level: 상태 레벨
-        icon: 섹션 아이콘
-        unit: 단위 (기본값: "%")
-        reverse: 역방향 표시 여부 (NCF 등)
-
-    Returns:
-        섹션 렌더링 성공 여부
-    """
-    # 상태 표시 텍스트 생성
-    if reverse:
-        status_text_display = (
-            f"{status_emoji} {status_text} ({current_value:,.0f} {unit})"
-        )
-    else:
-        status_text_display = (
-            f"{status_emoji} {status_text} ({current_value:,.1f}{unit})"
-        )
-
-    with st.expander(
-        f"{section_name} : {current_value:,.1f if not reverse else 0f}{unit} | {status_text_display}",
-        icon=icon,
-        expanded=False,
-    ):
-        # 섹션별 차트 렌더링을 위한 콜백 함수 반환
-        return True
 
 
 @handle_section_rendering_errors
@@ -1266,524 +1880,6 @@ def render_ctl_section(
             st.warning("No CTL data found")
 
 
-@handle_ui_rendering_errors
-def render_detail_tab(result_df: pd.DataFrame) -> None:
-    """
-    Detail 탭 렌더링
-
-    Args:
-        result_df: Assessment 결과 데이터프레임
-    """
-    if "result_df" not in st.session_state:
-        st.session_state["result_df"] = result_df
-
-    with st.expander(
-        "Assessment Detail Table", expanded=True, icon=":material/table_chart:"
-    ):
-
-        # 품질 지수 계산
-        result_df = calculate_quality_indices(result_df)
-        result_df["uf_pass_rate"] = result_df["uf_pass_rate"] * 100
-        result_df["gt_wt_pass_rate"] = result_df["gt_wt_pass_rate"] * 100
-        result_df["rr_pass_rate_pdf"] = result_df["rr_pass_rate_pdf"] * 100
-        result_df["ctl_pass_rate"] = result_df["ctl_pass_rate"] * 100
-
-        mcode_list = result_df["m_code"].tolist()
-        unified_cqms_df = get_cqms_unified_df(m_code=mcode_list)
-        unified_cqms_df = unified_cqms_df.pivot_table(
-            index="M_CODE",
-            columns="CATEGORY",
-            aggfunc="size",
-        )
-        unified_cqms_df = unified_cqms_df.reset_index()
-        unified_cqms_df = unified_cqms_df.rename(columns={"M_CODE": "m_code"})
-        result_df = pd.merge(
-            result_df,
-            unified_cqms_df,
-            on="m_code",
-            how="left",
-        )
-        result_df["Quality Issue"] = result_df["Quality Issue"].fillna(value=0)
-        result_df["4M Change"] = result_df["4M Change"].fillna(value=0)
-        result_df["Audit"] = result_df["Audit"].fillna(value=0)
-
-        hgws_df = get_hgws_df(m_code=mcode_list)
-        hgws_df = hgws_df.groupby("MCODE").agg({"RETURN CNT": "sum"}).reset_index()
-        hgws_df = hgws_df.rename(
-            columns={"MCODE": "m_code", "RETURN CNT": "Field Return"}
-        )
-        result_df = pd.merge(
-            result_df,
-            hgws_df,
-            on="m_code",
-            how="left",
-        )
-        result_df["Field Return"] = result_df["Field Return"].fillna(value=0)
-        show_full_table = st.toggle("Show Full Table", value=False)
-        if show_full_table:
-            remain_columns = [
-                "year",
-                "m_code",
-                "plant",
-                "oem",
-                "vehicle",
-                "min_date",
-                "max_date",
-                "total_qty",
-                "ncf_qty",
-                "ncf_rate",
-                "ncf_idx",
-                "uf_pass_rate",
-                "uf_idx",
-                "gt_wt_pass_rate",
-                "gt_idx",
-                "rr_pass_rate_pdf",
-                "rr_idx",
-                "ctl_pass_rate",
-                "ctl_idx",
-                "Quality Issue",
-                "4M Change",
-                "Audit",
-                "Field Return",
-            ]
-        else:
-            remain_columns = [
-                "year",
-                "m_code",
-                "plant",
-                "oem",
-                "vehicle",
-                "min_date",
-                "max_date",
-                "total_qty",
-                "ncf_idx",
-                "uf_idx",
-                "gt_idx",
-                "rr_idx",
-                "ctl_idx",
-                "Quality Issue",
-                "4M Change",
-                "Audit",
-                "Field Return",
-            ]
-
-        # 존재하는 컬럼만 필터링
-        remain_columns = [col for col in remain_columns if col in result_df.columns]
-
-        # pandas 스타일링 적용
-        styled_df = (
-            result_df[remain_columns]
-            .style.set_properties(
-                subset=["ncf_idx", "uf_idx", "gt_idx", "rr_idx", "ctl_idx"],
-                **{
-                    "background-color": f"{config_plotly.LIGHT_GRAY_CLR}",
-                    "text-align": "center",
-                    "font-size": "12px",
-                    "border": "1px solid #ddd",
-                },
-            )
-            .applymap(
-                multi_condition_style,
-                subset=["ncf_idx", "uf_idx", "gt_idx", "rr_idx", "ctl_idx"],
-            )
-        )
-
-        column_config = {
-            "year": st.column_config.TextColumn("Year", width="small"),
-            "m_code": st.column_config.TextColumn("M-Code", width="small"),
-            "plant": st.column_config.TextColumn("Plant", width="small"),
-            "oem": st.column_config.TextColumn("OEM", width="small"),
-            "vehicle": st.column_config.TextColumn("Vehicle", width="small"),
-            "min_date": st.column_config.TextColumn(
-                "Start",
-                help="Mass Production Start Date",
-                width="small",
-            ),
-            "max_date": st.column_config.TextColumn(
-                "End",
-                help="Mass Production End Date",
-                width="small",
-            ),
-            "total_qty": st.column_config.NumberColumn(
-                "Total Qty", width="small", format="%.0f"
-            ),
-            "ncf_qty": st.column_config.NumberColumn(
-                "NCF Qty", width="small", format="%.0f"
-            ),
-            "ncf_rate": st.column_config.NumberColumn("NCF(ppm)", format="%.0f ppm"),
-            "ncf_idx": st.column_config.NumberColumn(
-                "NCF Index", width="small", format="%.0f"
-            ),
-            "uf_pass_rate": st.column_config.NumberColumn("UF(%)", format="%.1f%%"),
-            "uf_idx": st.column_config.NumberColumn(
-                "UF Index", width="small", format="%.0f"
-            ),
-            "gt_wt_pass_rate": st.column_config.NumberColumn(
-                "GT(%)", width="small", format="%.1f%%"
-            ),
-            "gt_idx": st.column_config.NumberColumn(
-                "GT Index", width="small", format="%.0f"
-            ),
-            "rr_pass_rate_pdf": st.column_config.NumberColumn(
-                "RR(%)", width="small", format="%.1f%%"
-            ),
-            "rr_idx": st.column_config.NumberColumn(
-                "RR Index", width="small", format="%.0f"
-            ),
-            "ctl_pass_rate": st.column_config.NumberColumn(
-                "CTL(%)", width="small", format="%.1f%%"
-            ),
-            "ctl_idx": st.column_config.NumberColumn(
-                "CTL Index", width="small", format="%.0f"
-            ),
-            "Quality Issue": st.column_config.NumberColumn(
-                "Quality Issue", width="small", format="%.0f"
-            ),
-            "4M Change": st.column_config.NumberColumn(
-                "4M Change", width="small", format="%.0f"
-            ),
-            "Audit": st.column_config.NumberColumn(
-                "Audit", width="small", format="%.0f"
-            ),
-            "Field Return": st.column_config.NumberColumn(
-                "Field Return", width="small", format="%.0f"
-            ),
-        }
-
-        # 데이터프레임 표시
-        assessment_result_df = st.dataframe(
-            styled_df,
-            use_container_width=True,
-            hide_index=True,
-            column_config=column_config,
-            key="event_df",
-            on_select="rerun",
-            selection_mode="single-row",
-        )
-
-    # 선택된 행 처리
-    if assessment_result_df.selection.rows:
-        selected_data = get_selected_data_info(
-            result_df, assessment_result_df.selection.rows[0]
-        )
-
-        # 선택된 모델 정보를 카드 형태로 표시
-        st.markdown(
-            f"""
-            <div class="card-container">
-                <h3><span class="material-symbols-rounded">feature_search</span> Search Criteria Information</h3>
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
-                    <div style="background: rgba(255,255,255,0.1); padding: 1rem; border-radius: 8px;">
-                        <strong>M-Code:</strong><br>
-                        <span style="font-size: 1.2rem; font-weight: bold;">{selected_data['mcode']}</span>
-                    </div>
-                    <div style="background: rgba(255,255,255,0.1); padding: 1rem; border-radius: 8px;">
-                        <strong>Start Date:</strong><br>
-                        <span style="font-size: 1.2rem;">{selected_data['formatted_start_date']}</span>
-                    </div>
-                    <div style="background: rgba(255,255,255,0.1); padding: 1rem; border-radius: 8px;">
-                        <strong>End Date:</strong><br>
-                        <span style="font-size: 1.2rem;">{selected_data['formatted_end_date']}</span>
-                    </div>
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-        oeapp_df = load_oeapp_df_by_mcode(m_code=selected_data["mcode"])
-
-        # SOP, EOP 날짜 형식 변환 (YYYYMM -> YYYY-MM 형태의 문자열로 변환)
-        if not oeapp_df.empty:
-            for date_col in ["SOP", "EOP"]:
-                if date_col in oeapp_df.columns:
-                    oeapp_df[date_col] = oeapp_df[date_col].apply(
-                        lambda x: (
-                            f"{str(x)[:4]}-{str(x)[4:6]}"
-                            if pd.notna(x) and str(x) != "nan" and len(str(x)) == 6
-                            else x
-                        )
-                    )
-
-        # region Project Information
-        st.markdown(f"#### :material/info: **:grey[Project Information]**")
-        if not oeapp_df.empty:
-            project_info_col = st.columns([0.5, 10], vertical_alignment="center")
-            # 규격 정보
-            project_info_col[1].markdown(
-                f"""
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
-                <div style="background: rgba(255,255,255,0.1); padding: 1rem; border-radius: 8px;">
-                    <strong>Plant:</strong><br>
-                    <span style="font-size: 1.2rem;">{oeapp_df.iloc[0]['PLANT']}</span>
-                </div>
-                <div style="background: rgba(255,255,255,0.1); padding: 1rem; border-radius: 8px;">
-                    <strong>Size:</strong><br>
-                    <span style="font-size: 1.2rem;">{oeapp_df.iloc[0]['SIZE']}</span>
-                </div>
-                <div style="background: rgba(255,255,255,0.1); padding: 1rem; border-radius: 8px;">
-                    <strong>Pattern:</strong><br>
-                    <span style="font-size: 1.2rem;">{oeapp_df.iloc[0]['PATTERN']}</span>
-                </div>
-                <div style="background: rgba(255,255,255,0.1); padding: 1rem; border-radius: 8px;">
-                    <strong>Product Name:</strong><br>
-                    <span style="font-size: 1.2rem;">{oeapp_df.iloc[0]['PROD NAME']}</span>
-                </div>
-                <div style="background: rgba(255,255,255,0.1); padding: 1rem; border-radius: 8px;">
-                    <strong>EV / ICE :</strong><br>
-                    <span style="font-size: 1.2rem;">{oeapp_df.iloc[0]['EV']}</span>
-                </div>
-            </div>
-            """,
-                unsafe_allow_html=True,
-            )
-
-            # 프로젝트 정보
-            oe_app_info_col = st.columns([0.5, 1, 9], vertical_alignment="center")
-            oe_app_info_col[1].markdown(f"###### **:grey[OE App]**")
-
-            remain_col = [
-                "STATUS",
-                "CAR MAKER",
-                "SALES BRAND",
-                "VEHICLE MODEL(GLOBAL)",
-                # "VEHICLE MODEL(LOCAL)",
-                "PROJECT",
-                "SOP",
-                "EOP",
-            ]
-            column_config = {
-                "STATUS": st.column_config.TextColumn("Status", width="small"),
-                "CAR MAKER": st.column_config.TextColumn("Car Maker", width="small"),
-                "SALES BRAND": st.column_config.TextColumn(
-                    "Sales Brand", width="small"
-                ),
-                "VEHICLE MODEL(GLOBAL)": st.column_config.TextColumn(
-                    "Vehicle Model", width="medium"
-                ),
-                "PROJECT": st.column_config.TextColumn("Project", width="small"),
-                "SOP": st.column_config.TextColumn("SOP", width="small"),
-                "EOP": st.column_config.TextColumn("EOP", width="small"),
-            }
-            oe_app_info_col[2].dataframe(
-                oeapp_df[remain_col],
-                use_container_width=True,
-                hide_index=True,
-                column_config=column_config,
-            )
-        else:
-            st.info("No OE Application data available for the selected model code.")
-        # endregion
-
-        # region Metric Information
-        metric_title_col = st.columns([0.5, 6, 4], vertical_alignment="center")
-        metric_title_col[1].markdown(f"###### **:grey[OEM Event]**")
-        metric_title_col[2].markdown(f"###### **:grey[Field Return]**")
-
-        metric_col = st.columns([0.5, 6, 4], vertical_alignment="center")
-        cqms_unified_df = get_cqms_unified_df(m_code=selected_data["mcode"])
-        groupby_cqms_unified_df = (
-            cqms_unified_df.groupby("CATEGORY")
-            .agg(Count=("CATEGORY", "count"))
-            .reset_index()
-        )
-
-        with metric_col[1]:
-            cqms_col = st.columns(3)
-
-            cqms_col[0].metric(
-                label="Quality Issue",
-                value=(
-                    groupby_cqms_unified_df[
-                        groupby_cqms_unified_df["CATEGORY"] == "Quality Issue"
-                    ]["Count"].values[0]
-                ),
-                delta=None,
-            )
-            cqms_col[1].metric(
-                label="4M Change",
-                value=(
-                    groupby_cqms_unified_df[
-                        groupby_cqms_unified_df["CATEGORY"] == "4M Change"
-                    ]["Count"].values[0]
-                ),
-                delta=None,
-            )
-            cqms_col[2].metric(
-                label="Audit",
-                value=(
-                    groupby_cqms_unified_df[
-                        groupby_cqms_unified_df["CATEGORY"] == "Audit"
-                    ]["Count"].values[0]
-                ),
-                delta=None,
-            )
-        with metric_col[2]:
-            hgws_df = get_hgws_df(m_code=selected_data["mcode"])
-            hgws_df = hgws_df.sort_values(by="RETURN CNT", ascending=False)
-            if not hgws_df.empty:
-                trace = go.Bar(
-                    x=hgws_df["RETURN CNT"],
-                    y=hgws_df["REASON DESCRIPTION"],
-                    text=hgws_df["RETURN CNT"],
-                    textposition="outside",
-                    marker=dict(color=config_plotly.ORANGE_CLR),
-                    orientation="h",
-                )
-                layout = go.Layout(
-                    xaxis=dict(
-                        title="Field Return Count",
-                        range=[0, max(hgws_df["RETURN CNT"]) + 1],
-                        visible=False,
-                    ),
-                    yaxis=dict(title="Reason Description", autorange="reversed"),
-                    height=150,
-                    margin=dict(l=0, r=0, t=20, b=20),
-                )
-                fig = go.Figure(data=[trace], layout=layout)
-                st.plotly_chart(fig, use_container_width=True)
-            else:
-                st.info("### :grey[No Field Return]")
-        oem_event_col_detail = st.columns([0.5, 10], vertical_alignment="center")
-        with oem_event_col_detail[1].expander("Detail", expanded=False):
-            if len(cqms_unified_df) > 0:
-                st.dataframe(cqms_unified_df, use_container_width=True, hide_index=True)
-            else:
-                st.info("### :grey[No OEM Event]")
-            if len(hgws_df) > 0:
-                st.dataframe(hgws_df, use_container_width=True, hide_index=True)
-            else:
-                st.info("### :grey[No Field Return]")
-        # endregion
-
-        # region Insight
-        insight_df = get_client("sqlite").execute(
-            f"SELECT * FROM mass_assess_insight WHERE M_CODE = '{selected_data['mcode']}'"
-        )
-
-        # Insight 섹션 헤더
-        st.markdown(f"#### :material/lightbulb: **:grey[Assessment Insights]**")
-
-        # 상태에 따른 색상 스타일 가져오기
-
-        if not insight_df.empty:
-            # Status와 Insight 데이터 추출
-            status = str(insight_df.iloc[0]["Status"])
-            insight = str(insight_df.iloc[0]["Insight"])
-            bg_color, border_color, text_color = get_insight_status_style(status)
-
-            # Insight 섹션 레이아웃
-            insight_col = st.columns([0.5, 2, 0.5, 7.5], vertical_alignment="center")
-
-            # Status 표시 (왼쪽 컬럼)
-            with insight_col[1]:
-                st.markdown(
-                    f"""
-                    <div style="
-                        background: {bg_color};
-                        border: 2px solid {border_color};
-                        border-radius: 12px;
-                        padding: 1.5rem;
-                        text-align: center;
-                        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-                    ">
-                        <div style="
-                            font-size: 1.2rem;
-                            font-weight: 600;
-                            color: {text_color};
-                            margin: 0;
-                        ">{status}</div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-
-            # Insight 표시 (오른쪽 컬럼)
-            with insight_col[3]:
-                st.markdown(
-                    insight,
-                    unsafe_allow_html=True,
-                )
-        else:
-            # 데이터가 없는 경우
-            insight_col = st.columns([0.5, 10], vertical_alignment="center")
-            insight_col[1].markdown(
-                f"""
-                <div class="section-card">
-                    <div style="text-align: center; padding: 1rem;">
-                        <p style="color: #9ca3af; margin: 0;">No Assessment Insights Available</p>
-                    </div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-        # endregion
-
-        # 각 분석 섹션 렌더링
-        st.markdown(
-            f"#### :material/analytics: **:grey[Production Analysis]**",
-        )
-        production_col = st.columns([0.5, 10], vertical_alignment="center")
-        with production_col[1]:
-            render_production_section(
-                selected_data["mcode"],
-                selected_data["start_date"],
-                selected_data["end_date"],
-                result_df,
-            )
-            render_ncf_section(
-                selected_data["mcode"],
-                selected_data["start_date"],
-                selected_data["end_date"],
-                result_df,
-            )
-            render_uf_section(
-                selected_data["mcode"],
-                selected_data["start_date"],
-                selected_data["end_date"],
-                result_df,
-            )
-            render_weight_section(
-                selected_data["mcode"],
-                selected_data["start_date"],
-                selected_data["end_date"],
-                result_df,
-            )
-            render_rr_section(
-                selected_data["mcode"],
-                selected_data["formatted_start_date"],
-                selected_data["formatted_end_date"],
-                result_df,
-            )
-            render_ctl_section(
-                selected_data["mcode"],
-                selected_data["start_date"],
-                selected_data["end_date"],
-                result_df,
-            )
-
-    else:
-        st.warning(
-            "Please select a row from the assessment result table to view detailed analysis."
-        )
-
-
-@handle_ui_rendering_errors
-def render_description_tab() -> None:
-    """
-    Description 탭 렌더링
-    """
-    st.title("Detail")
-
-    try:
-        with open("_07_docs/product_assessment.md", "r", encoding="utf-8") as file:
-            markdown_content = file.read()
-        st.markdown(markdown_content)
-    except FileNotFoundError:
-        st.error("product_assessment.md 파일을 찾을 수 없습니다.")
-    except Exception as e:
-        st.error(f"파일을 읽는 중 오류가 발생했습니다: {str(e)}")
-
-
 # =============================================================================
 # 메인 페이지 UI 구성
 # =============================================================================
@@ -1794,7 +1890,11 @@ main_tab = st.tabs(["Overview", "Detail", "Description"])
 # Assessment 결과 데이터 로드
 result_df = load_assessment_result()
 
-result_df = result_df[result_df["year"] == year_select]
+# 품질 지수 계산
+result_df = calculate_quality_indices(result_df)
+
+# CQMS, Field Return 추가
+result_df = calculate_cqms_n_filed_return(result_df)
 
 
 with main_tab[0]:

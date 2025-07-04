@@ -2,7 +2,7 @@ from typing import Optional
 import pandas as pd
 
 # SQL 쿼리 템플릿 정의
-CTE_MES_MASTER = """--sql
+CTE_MES_MASTER = f"""--sql
     SELECT DISTINCT
         PLT_CD PLANT,
         PRD_CD M_CODE,
@@ -12,7 +12,6 @@ CTE_MES_MASTER = """--sql
     FROM HKT_DW.MES.MAS_D_LMASTR101
     WHERE 1=1
         AND SPEC_FG = 'KT'
-        AND PRD_CD = CASE WHEN '{mcode}' IS NOT NULL THEN '{mcode}' ELSE PRD_CD END
 """
 
 CTE_UF_DATA = """--sql
@@ -180,10 +179,10 @@ def uf_product_assess_monthly(
     return query
 
 
-def uf_standard(mcode):
+def uf_standard(mcode: Optional[str] = None):
     query = f"""--sql
         WITH  
-            MAS AS ({CTE_MES_MASTER.format(mcode=mcode)}),
+            MAS AS ({CTE_MES_MASTER}),
             UF_STD AS ({CTE_MES_UF_SPECIFICATION})
         SELECT
             MAS.PLANT,
@@ -197,8 +196,9 @@ def uf_standard(mcode):
         LEFT JOIN UF_STD
             ON MAS.SPEC_CD = UF_STD.SPEC_CD 
                 AND MAS.PLANT = UF_STD.PLANT
-        WHERE MAS.M_CODE = '{mcode}'
-        and MAS.SPEC_FG = 'KT'
+        WHERE 1=1
+            {f"AND MAS.M_CODE = '{mcode}'" if mcode else ""}
+        AND MAS.SPEC_FG = 'KT'
     """
     return query
 

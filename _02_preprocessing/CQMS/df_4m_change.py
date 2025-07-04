@@ -54,6 +54,22 @@ def load_4m() -> pd.DataFrame:
 
 
 @helper_pandas.cache_data_safe(ttl=600)
+def get_4m_change_detail_df(mcode_list: list) -> pd.DataFrame:
+    """4M 변경 데이터를 로드하고 기본 전처리를 수행합니다.
+
+    Returns:
+        pd.DataFrame: 전처리된 4M 변경 데이터프레임
+    """
+    try:
+        df = load_4m()
+        df = df[df["M_CODE"].isin(mcode_list)]
+        return df
+    except Exception as e:
+        st.error(f"4M 데이터 로드 중 오류 발생: {str(e)}")
+        return pd.DataFrame()
+
+
+@helper_pandas.cache_data_safe(ttl=600)
 def filtered_4m_by_weekly(
     start_date: pd.Timestamp, end_date: pd.Timestamp
 ) -> pd.DataFrame:

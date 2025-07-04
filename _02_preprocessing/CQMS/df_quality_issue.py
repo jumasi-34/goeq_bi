@@ -72,6 +72,14 @@ def prepare_qi_base(df: pd.DataFrame, exclude_ot=False) -> pd.DataFrame:
 
 
 # #############################################
+@helper_pandas.cache_data_safe(ttl=600)
+def get_quality_issue_df_detail(mcode_list=None) -> pd.DataFrame:
+    df = get_client("snowflake").execute(q_quality_issue.query_quality_issue())
+    df = prepare_qi_base(df)
+    if mcode_list:
+        df = df[df["M_CODE"].isin(mcode_list)]
+
+    return df
 
 
 @helper_pandas.cache_data_safe(ttl=600)

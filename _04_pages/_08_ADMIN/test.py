@@ -18,22 +18,26 @@ sys.path.append(project_root)
 
 from _05_commons import config
 from _00_database.db_client import get_client
-from _01_query.GMES import q_ncf
+from _01_query.GMES import q_rr
+from _01_query.GMES import q_uf
 
 # 개발 모드 시 모듈 리로드 (코드 변경사항 반영을 위해)
 if config.DEV_MODE:
     importlib.reload(config)
-    importlib.reload(q_ncf)
+    importlib.reload(q_rr)
+    importlib.reload(q_uf)
 
 
-db_client = get_client("sqlite")
-df = db_client.execute("SELECT * FROM mass_assess_target")
+db_client = get_client("snowflake")
+df = db_client.execute(q_uf.uf_standard())
+
+st.download_button(
+    label="Download Data",
+    data=df.to_csv(index=False),
+    file_name="uf_standard.csv",
+    mime="text/csv",
+)
+
 st.dataframe(df)
 
-df["M_CODE"] = df["M_CODE"].astype(str)
-df["M_CODE_RR"] = df["M_CODE_RR"].astype(str)
-df["M_CODE_PAIR"] = df["M_CODE_PAIR"].astype(str)
-
-db_client.insert_dataframe(df, "mass_assess_target")
-
-st.text(df.info())
+st.dataframe(df)
